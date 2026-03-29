@@ -278,33 +278,6 @@
   </div>
 </div>
 
-<!-- Quick Log Modal -->
-<div class="modal-overlay" id="modalQuick">
-  <div class="modal-backdrop" onclick="closeModal('modalQuick')"></div>
-  <div class="modal" role="dialog" style="max-height:auto">
-    <div class="modal-header">
-      <div class="modal-title" id="quickLogTitle">Quick Log</div>
-      <button class="modal-close" onclick="closeModal('modalQuick')" aria-label="Close">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="quickPlantId">
-      <div class="action-grid" id="quickActionGrid">
-        <div class="action-option" data-action="fertilized" onclick="selectQuickAction(this)"><span class="action-emoji">🌿</span>Fertilized</div>
-        <div class="action-option" data-action="pruned" onclick="selectQuickAction(this)"><span class="action-emoji">✂️</span>Pruned</div>
-        <div class="action-option selected" data-action="observed" onclick="selectQuickAction(this)"><span class="action-emoji">👀</span>Observed</div>
-      </div>
-      <div class="form-group mt-12">
-        <label class="form-label" for="quickNotes">Note <span>(optional)</span></label>
-        <input type="text" id="quickNotes" placeholder="Optional quick note…" autocomplete="off">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary btn-sm" onclick="closeModal('modalQuick')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveQuickLog()">Log It</button>
-    </div>
-  </div>
-</div>
-
 <!-- Sync Setup Modal -->
 <div class="modal-overlay" id="modalSync">
   <div class="modal-backdrop" onclick="closeModal('modalSync')"></div>

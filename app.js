@@ -236,7 +236,7 @@ function renderDashboard() {
         ${activityBadge}
       </div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
-        <button class="quick-btn quick-btn-note" onclick="quickLog('${esc(plant.id)}','observed')">📝 Note</button>
+        <button class="quick-btn quick-btn-note" onclick="openAddLog('${esc(plant.id)}')">📝 Note</button>
       </div>
     </div>`;
   }).join('');
@@ -623,49 +623,6 @@ function confirmDeleteLog(logId) {
 function selectAction(el) {
   document.querySelectorAll('#actionGrid .action-option').forEach(x => x.classList.remove('selected'));
   el.classList.add('selected');
-}
-
-// ============================================================
-// QUICK LOG
-// ============================================================
-function quickLog(plantId, action) {
-  document.getElementById('quickPlantId').value = plantId;
-  document.getElementById('quickNotes').value = '';
-  document.querySelectorAll('#quickActionGrid .action-option').forEach(el => {
-    el.classList.toggle('selected', el.dataset.action === action);
-  });
-  const plant = DB.getPlants().find(p => p.id === plantId);
-  document.getElementById('quickLogTitle').textContent = plant ? `Log: ${plant.name}` : 'Quick Log';
-  openModal('modalQuick');
-}
-
-function selectQuickAction(el) {
-  document.querySelectorAll('#quickActionGrid .action-option').forEach(x => x.classList.remove('selected'));
-  el.classList.add('selected');
-}
-
-function saveQuickLog() {
-  const plantId = document.getElementById('quickPlantId').value;
-  if (!plantId) return;
-  const selectedAction = document.querySelector('#quickActionGrid .action-option.selected');
-  const action = selectedAction ? selectedAction.dataset.action : 'observed';
-  const notes = document.getElementById('quickNotes').value.trim();
-
-  DB.addLog({
-    id: uuid(),
-    plantId,
-    action,
-    date: today(),
-    notes,
-    photo: null,
-    createdAt: new Date().toISOString()
-  });
-
-  closeModal('modalQuick');
-  showToast(`${actionEmoji(action)} ${capitalize(action)} logged`);
-  if (state.view === 'dashboard') renderDashboard();
-  else if (state.view === 'detail') renderDetail(plantId);
-  schedulePush();
 }
 
 // ============================================================
