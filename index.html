@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#2d5016">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Garden Journal v1.7</title>
+<title>Garden Journal v1.8</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -31,7 +31,10 @@
 <main class="main view active" id="viewDashboard">
   <div class="section-title">
     <span>My Plants</span>
-    <span class="plant-count" id="plantCount"></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="plant-count" id="plantCount"></span>
+      <button class="inactive-toggle" id="inactiveToggle" onclick="toggleShowInactive()" style="display:none"></button>
+    </div>
   </div>
   <div class="cards-grid" id="plantsGrid"></div>
 </main>
@@ -211,6 +214,13 @@
           <option value="🫚">🫚 Ginger</option>
           <option value="🍋">🍋 Citrus</option>
           <option value="🍓">🍓 Berry</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="plantStatus">Status</label>
+        <select id="plantStatus">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
         </select>
       </div>
       <div class="form-group">

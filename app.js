@@ -133,7 +133,8 @@ let state = {
   currentPlantId: null,
   searchQuery: '',
   filterAction: 'all',
-  filterPlant: 'all'
+  filterPlant: 'all',
+  showInactive: false
 };
 
 // ============================================================
