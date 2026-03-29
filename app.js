@@ -1208,12 +1208,35 @@ function setSyncDot(state) {
 function updateSyncDesc() {
   const s = DB.getSettings();
   const desc = document.getElementById('syncDesc');
+  const syncNowRow = document.getElementById('syncNowRow');
   if (!desc) return;
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
+    if (syncNowRow) syncNowRow.style.display = '';
   } else {
     desc.textContent = 'Share your garden across devices';
+    if (syncNowRow) syncNowRow.style.display = 'none';
+  }
+}
+
+async function forcSync() {
+  const btn = document.getElementById('syncNowBtn');
+  const desc = document.getElementById('syncNowDesc');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (desc) desc.textContent = 'Syncing…';
+  try {
+    await Sync.push();
+    const pulled = await Sync.pull();
+    if (pulled) { renderDashboard(); renderKnowledge(); }
+    if (desc) desc.textContent = 'Synced just now ✓';
+    showToast('Synced ✓');
+  } catch (e) {
+    if (desc) desc.textContent = 'Sync failed — check connection';
+    showToast('Sync failed');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync'; }
+    updateSyncDesc();
   }
 }
 

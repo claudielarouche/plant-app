@@ -118,6 +118,14 @@
         </div>
         <button class="settings-row-action" onclick="openSyncSetup()">Setup</button>
       </div>
+      <div class="settings-row" id="syncNowRow" style="display:none">
+        <div class="settings-row-icon" style="background:var(--g7)">☁️</div>
+        <div class="settings-row-text">
+          <div class="settings-row-label">Sync Now</div>
+          <div class="settings-row-desc" id="syncNowDesc">Push &amp; pull latest data</div>
+        </div>
+        <button class="settings-row-action" id="syncNowBtn" onclick="forcSync()">Sync</button>
+      </div>
     </div>
   </div>
   <div class="settings-section">
