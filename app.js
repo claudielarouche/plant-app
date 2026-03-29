@@ -58,7 +58,7 @@ const DB = {
     return logs.length ? logs[0] : null;
   },
 
-  exportAll() { return { plants: this.getPlants(), logs: this.getLogs(), settings: this.getSettings(), exportedAt: new Date().toISOString(), version: 1 }; },
+  exportAll() { return { plants: this.getPlants(), logs: this.getLogs(), settings: this.getSettings(), knowledge: this.getKnowledge(), exportedAt: new Date().toISOString(), version: 1 }; },
   importAll(data) {
     if (!data.plants || !data.logs) throw new Error('Invalid format');
     const existing = this.exportAll();
@@ -68,6 +68,14 @@ const DB = {
     data.logs.forEach(l => logMap[l.id] = l);
     this.savePlants(Object.values(plantMap));
     this.saveLogs(Object.values(logMap));
+    // Merge knowledge: incoming edits win (last-write by updatedAt)
+    if (data.knowledge && Array.isArray(data.knowledge)) {
+      const kMap = Object.fromEntries(existing.knowledge.map(c => [c.id, c]));
+      data.knowledge.forEach(c => {
+        if (!kMap[c.id] || c.updatedAt > kMap[c.id].updatedAt) kMap[c.id] = c;
+      });
+      this.saveKnowledge(Object.values(kMap));
+    }
   }
 };
 
@@ -160,7 +168,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.9</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v2.0</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -269,16 +277,47 @@ function toggleShowInactive() {
 }
 
 // ============================================================
-// RENDER: KNOWLEDGE PANE
+// KNOWLEDGE: PLANT TYPE EMOJIS
+// ============================================================
+const PLANT_TYPE_EMOJIS = {
+  'Arugula':'🥗','Basil':'🌿','Bay Leaf':'🍃','Bean (Bush)':'🫘',
+  'Beet':'🫐','Bell Pepper':'🫑','Blueberry':'🫐','Bok Choy':'🥬',
+  'Broccoli':'🥦','Brussels Sprout':'🥦','Catnip':'🌿','Celery':'🥬',
+  'Chamomile':'🌼','Chervil':'🌿','Chives':'🌿','Cilantro':'🌿',
+  'Cucumber':'🥒','Dill':'🌿','Eggplant':'🍆','Fennel':'🌿',
+  'Fig':'🍈','Garlic':'🧄','Green Onion':'🌿','Hot Pepper':'🌶️',
+  'Kale':'🥬','Kohlrabi':'🥦','Lavender':'💜','Leek':'🥬',
+  'Lemon':'🍋','Lemon Balm':'🌿','Lettuce':'🥗','Lime':'🍈',
+  'Marjoram':'🌿','Microgreens':'🌱','Mint':'🌿','Mustard Greens':'🥬',
+  'Okra':'🌿','Oregano':'🌿','Parsley':'🌿','Passion Fruit':'🍈',
+  'Pea':'🌱','Pomegranate':'🍎','Potato':'🥔','Radish':'🌱',
+  'Raspberry':'🍓','Rosemary':'🌿','Sage':'🌿','Shallot':'🧅',
+  'Sorrel':'🌿','Spinach':'🥗','Stevia':'🌿','Strawberry':'🍓',
+  'Swiss Chard':'🥬','Tarragon':'🌿','Thyme':'🌿','Tomatillo':'🍅',
+  'Tomato':'🍅','Turmeric':'🟡','Watercress':'🌿','Zucchini':'🥒'
+};
+function getPlantTypeEmoji(type) { return PLANT_TYPE_EMOJIS[type] || '🌱'; }
+
+// ============================================================
+// RENDER: KNOWLEDGE PANE (dashboard)
 // ============================================================
 function renderKnowledge() {
-  const cards = DB.getKnowledge();
+  const all = DB.getKnowledge();
   const grid = document.getElementById('knowledgeGrid');
   if (!grid) return;
+  // Show cards with content, always show Indoor Gardening Tips
+  const cards = all
+    .filter(c => c.content || c.category === 'Indoor Gardening Tips')
+    .sort((a, b) => {
+      if (a.category === 'Indoor Gardening Tips') return -1;
+      if (b.category === 'Indoor Gardening Tips') return 1;
+      return a.category.localeCompare(b.category);
+    });
+  if (!cards.length) { grid.innerHTML = '<div class="empty-state" style="padding:24px 0"><div class="empty-icon">🌱</div><div class="empty-title">No knowledge yet</div><div class="empty-desc">Open a plant to start building your knowledge base.</div></div>'; return; }
   grid.innerHTML = cards.map(card => {
     const preview = card.content
-      ? card.content.split('\n').filter(l => l.trim()).slice(0, 3).join(' · ')
-      : 'No notes yet — tap to add.';
+      ? card.content.split('\n').filter(l => l.trim()).slice(0, 2).join(' · ')
+      : 'Tap to add notes.';
     return `<div class="knowledge-card" onclick="openKnowledgeCard('${esc(card.id)}')">
       <div class="knowledge-card-header">
         <span class="knowledge-emoji">${esc(card.emoji)}</span>
@@ -312,6 +351,60 @@ function saveKnowledgeCard() {
   closeModal('modalKnowledge');
   renderKnowledge();
   showToast('Saved ✓');
+}
+
+// ============================================================
+// RENDER: KNOWLEDGE PANE (plant detail, inline auto-save)
+// ============================================================
+let _kSaveTimer = null;
+
+function getOrCreateKnowledgeCard(type) {
+  const all = DB.getKnowledge();
+  let card = all.find(c => c.category.toLowerCase() === type.toLowerCase());
+  if (!card) {
+    card = { id: uuid(), emoji: getPlantTypeEmoji(type), category: type, content: '', updatedAt: new Date().toISOString() };
+    all.push(card);
+    DB.saveKnowledge(all);
+  }
+  return card;
+}
+
+function renderDetailKnowledge(plant) {
+  const pane = document.getElementById('detailKnowledgePane');
+  if (!pane) return;
+  if (!plant.type) {
+    pane.innerHTML = `<div class="section-title"><span>🌱 Knowledge</span></div><div class="knowledge-no-type">Set a plant type to see knowledge notes for this plant.</div>`;
+    return;
+  }
+  const card = getOrCreateKnowledgeCard(plant.type);
+  pane.innerHTML = `
+    <div class="section-title">
+      <span>${esc(getPlantTypeEmoji(plant.type))} ${esc(plant.type)}</span>
+      <span class="autosave-indicator" id="autosaveIndicator"></span>
+    </div>
+    <input type="hidden" id="detailKnowledgeId" value="${esc(card.id)}">
+    <textarea class="knowledge-inline-editor" id="detailKnowledgeTextarea"
+      placeholder="Add your tips, observations, and notes about ${esc(plant.type)}…"
+      oninput="autoSaveDetailKnowledge()">${esc(card.content || '')}</textarea>
+  `;
+}
+
+function autoSaveDetailKnowledge() {
+  const indicator = document.getElementById('autosaveIndicator');
+  if (indicator) indicator.textContent = 'Saving…';
+  clearTimeout(_kSaveTimer);
+  _kSaveTimer = setTimeout(() => {
+    const id = document.getElementById('detailKnowledgeId')?.value;
+    const content = document.getElementById('detailKnowledgeTextarea')?.value;
+    if (!id) return;
+    const all = DB.getKnowledge();
+    const card = all.find(c => c.id === id);
+    if (!card) return;
+    card.content = content;
+    card.updatedAt = new Date().toISOString();
+    DB.saveKnowledge(all);
+    if (indicator) { indicator.textContent = 'Saved ✓'; setTimeout(() => { if (indicator) indicator.textContent = ''; }, 2000); }
+  }, 700);
 }
 
 // ============================================================
@@ -396,6 +489,8 @@ function renderDetail(plantId) {
 
     <input type="file" id="plantPhotoInput_${esc(plant.id)}" accept="image/*" capture="environment" style="display:none" onchange="handlePlantPhoto(this, '${esc(plant.id)}')">
   `;
+
+  renderDetailKnowledge(plant);
 }
 
 // ============================================================
@@ -1085,24 +1180,177 @@ function actionEmoji(action) { return ACTION_EMOJIS[action] || '📝'; }
 async function init() {
   updateSyncDesc();
 
-  // Seed knowledge cards if first run
-  if (!DB.getKnowledge().length) {
+  // Seed knowledge cards — re-seed on major version change
+  if (DB.getSettings().knowledgeVersion !== '2') {
     const knowledgeCards = [
-      {
-        id: uuid(), emoji: '🏠', category: 'Indoors Gardening Tips',
-        content: `Light: Most edibles need 6–8h direct sun or 12–16h under grow lights.\nSoil: Always use potting mix — never garden soil. Add 20–30% perlite for drainage.\nWatering: Overwatering is the #1 killer. Check 2 inches deep before watering.\nHumidity: 40–60% is ideal. Group plants together or use a tray with pebbles and water.\nFertilizing: Feed every 2–4 weeks with balanced liquid fertilizer during the growing season.\nTemperature: Most edibles prefer 65–80°F (18–27°C). Keep away from cold drafts.\nRotation: Turn pots a quarter-turn each week so all sides get equal light.\nPests: Yellow sticky traps catch fungus gnats. Neem oil handles most soft-bodied insects.`,
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: uuid(), emoji: '🍅', category: 'Tomatoes',
-        content: `Best indoor varieties: Tiny Tim, Tumbling Tom, Micro Tom, Sweet 100.\nLight: 8+ hours bright sun or 16h under grow lights.\nPollination: Gently shake flowering stems daily, or use a small brush to transfer pollen between flowers.\nSupport: Indeterminate types need staking or caging. Bush types stay compact.\nWatering: Keep consistently moist. Irregular watering causes blossom end rot and cracking.\nFertilizing: Switch to high-phosphorus/potassium fertilizer when flowers appear.\nPruning: Pinch suckers on indeterminate varieties for better yield and airflow.\nIdeal temp: 65–80°F (18–27°C). Below 55°F stops fruit set.`,
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: uuid(), emoji: '🧄', category: 'Garlic',
-        content: `Planting: Break bulb into cloves, plant pointed-end up, 1 inch deep.\nLight: 6–8h of light. Tolerates slightly lower light than most vegetables.\nWatering: Water when the top inch of soil is dry. Do not overwater.\nHarvest (greens): Snip tops at any time for fresh garlic flavor — they regrow.\nHarvest (bulbs): Takes 8–9 months. Better suited to outdoor growing for full bulbs.\nQuick crop tip: Plant multiple cloves close together in a pot and harvest the greens continuously like herbs.\nContainer size: At least 6 inches deep for greens; 8–12 inches for attempting bulbs.`,
-        updatedAt: new Date().toISOString()
-      },
+      { id: uuid(), emoji: '🏠', category: 'Indoor Gardening Tips',
+        content: `Light: Most edibles need 6–8h direct sun or 12–16h under grow lights.\nSoil: Always use potting mix — never garden soil. Add 20–30% perlite for drainage.\nWatering: Overwatering is the #1 killer. Check 2 inches deep before watering.\nHumidity: 40–60% is ideal. Group plants or use a pebble tray with water.\nFertilizing: Feed every 2–4 weeks with balanced liquid fertilizer during growing season.\nTemperature: Most edibles prefer 65–80°F (18–27°C). Keep away from cold drafts.\nRotation: Turn pots a quarter-turn weekly so all sides get equal light.\nPests: Yellow sticky traps catch fungus gnats. Neem oil handles most soft-bodied insects.\nAir circulation: A small fan on low improves stem strength and reduces mould.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥗', category: 'Arugula',
+        content: `One of the easiest greens to grow indoors. Ready to harvest in 30–40 days.\nLight: 4–6h — one of the most shade-tolerant edibles.\nSowing: Scatter seeds on moist soil, barely cover. Germinate in 3–7 days.\nHarvest: Cut outer leaves at 3–4 inches. Centre regrows for multiple harvests.\nBolting: Arugula bolts quickly in heat. Keep cool (60–68°F / 15–20°C) for best flavour.\nFlavour tip: Harvest young for mild, nutty flavour. Older leaves are more peppery.\nSuccession sow every 2–3 weeks for continuous harvest.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Basil',
+        content: `Needs warmth and bright light — at least 6h sun or 14h grow lights.\nPinch flower buds immediately as they appear; flowering stops leaf production.\nHarvest: Always cut above a leaf node so two new shoots grow back.\nWatering: Keep soil moist but not soggy. Water at the base — wet leaves cause fungal issues.\nTemperature: Below 50°F (10°C) causes blackening. Keep warm at all times.\nVarieties: Genovese (classic), Thai basil (more heat tolerant), lemon basil.\nPropagate easily: Place a stem cutting in water; roots appear in 1–2 weeks.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍃', category: 'Bay Leaf',
+        content: `Slow-growing but long-lived. One plant provides years of harvest.\nLight: 4–6h of bright indirect light. Tolerates lower light than most herbs.\nWatering: Allow soil to dry slightly between waterings. Very drought-tolerant once established.\nHarvest: Pick individual leaves as needed. Always leave plenty of foliage on the plant.\nGrowth: Expect slow growth — may only put out a few new leaves per month.\nPruning: Prune to maintain shape. Pruned stems can be used as cuttings.\nNote: Fresh bay leaves are much stronger in flavour than dried — use half as many.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🫘', category: 'Bean (Bush)',
+        content: `Bush beans are compact and well-suited for large containers indoors.\nLight: 8+ hours of bright light — one of the more demanding crops.\nContainer: At least 12 inches deep. Pot up as plant grows.\nPlanting: Sow seeds 1 inch deep, 3 inches apart. Germinate in 7–10 days.\nWatering: Keep consistently moist. Avoid wetting foliage.\nFertilizing: Light feeder — too much nitrogen = leafy plant, few pods.\nHarvest: Pick pods when slender and before seeds bulge (50–60 days).\nNote: Bush beans are generally more practical indoors than pole beans.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🫐', category: 'Beet',
+        content: `Grow beets for greens as much as roots — both are edible and nutritious.\nLight: 6h minimum. Roots develop better with more light.\nContainer: At least 12 inches deep for good root development.\nThinning: Thin seedlings to 3 inches apart — beet "seeds" are actually clusters.\nHarvest (greens): At any size for salads. Harvest roots at golf-ball to tennis-ball size.\nWatering: Keep consistently moist. Drought causes woody, bitter roots.\nFertilizing: Low nitrogen (causes leafy growth over roots). Use balanced or root fertilizer.\nGermination: Soak seeds 2h before planting to speed up the 7–14 day germination.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🫑', category: 'Bell Pepper',
+        content: `Compact varieties best for indoors: Carnival, Pot-a-Pep, Baby Belle.\nLight: 8+ hours or 16h under grow lights. Insufficient light = no fruit.\nPollination: Shake gently or use a brush between flowers.\nTemperature: 70–85°F (21–29°C) for best fruit set. Cool temps delay ripening.\nWatering: Consistent moisture. Inconsistent watering causes blossom drop.\nRipening: Green → yellow → orange → red. Each stage has different flavour.\nFertilizing: High potassium fertilizer once flowering begins.\nOverwintering: Cut back in fall and keep indoors. Peppers are perennial.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🫐', category: 'Blueberry',
+        content: `Possible indoors with the right variety and care — requires patience.\nBest varieties: Northblue, Patriot, Top Hat (dwarf, perfect for pots).\nSoil: Acidic is critical — pH 4.5–5.5. Use ericaceous compost or add sulphur.\nLight: 8+ hours of bright light. Grow lights help in Canadian winters.\nPollination: Two varieties improve fruit set, but self-fertile types exist.\nChill hours: Most blueberries need 400–800 hours below 45°F to fruit. Check variety.\nFertilizing: Use acid fertilizer (for rhododendrons/azaleas). Avoid lime.\nContainer: Large pot (5+ gallons). Repot every 2–3 years.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥬', category: 'Bok Choy',
+        content: `Fast-growing cool-season crop. Baby bok choy ready in 30 days; full size in 45–60.\nLight: 4–6h. Tolerates lower light better than most brassicas.\nTemperature: 60–70°F (15–21°C). Heat causes bolting.\nWatering: Keep consistently moist — wilting stresses the plant quickly.\nHarvest (baby): At 4–6 inches, cut whole plant at base.\nHarvest (full): Harvest outer leaves, or cut whole head.\nSowing: Direct sow 2 seeds per cell, thin to strongest seedling.\nNote: A great succession crop — sow every 3 weeks for continuous harvest.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥦', category: 'Broccoli',
+        content: `Best grown as microgreens or baby shoots indoors — full heads need too much space and light.\nMicrogreens: Ready in 8–12 days. Dense sowing, harvest at cotyledon or first true leaf stage.\nBaby shoots: Harvest at 4–6 inches for a broccolini-style tender shoot.\nLight: 6+ hours for shoots. 8+ hours for any attempt at full heads.\nTemperature: Prefers cool (60–70°F / 15–21°C). Heat causes bolting.\nSoil: Rich, moisture-retaining mix. Broccoli is a heavy feeder.\nNote: Full broccoli heads indoors are rarely practical — focus on the greens.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌼', category: 'Chamomile',
+        content: `German chamomile (annual) is easier to grow than Roman chamomile (perennial).\nLight: 4–6h of bright light. Tolerates some shade.\nSowing: Scatter seeds on soil surface — they need light to germinate. Do not cover.\nGermination: 7–14 days. Keep soil moist during this period.\nHarvest: Pick flowers when fully open. Dry on a screen in a warm, airy spot.\nDrying: Air-dry for 1–2 weeks. Store in airtight jar away from light.\nTea: 1 tbsp dried flowers per cup boiling water, steep 5 minutes.\nNote: Will self-seed if you let some flowers go to seed.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Chervil',
+        content: `Delicate anise-flavoured herb. Underused but excellent in the garden.\nLight: Prefers partial shade — 3–4h. One of the few herbs that does better with less light.\nTemperature: Cool-season herb (50–65°F / 10–18°C). Bolts quickly in heat.\nSowing: Direct sow — does not transplant well. Germination in 7–14 days.\nHarvest: Cut outer leaves once plant reaches 6 inches. Harvest before flowering.\nUse: Excellent in French cuisine — salads, sauces, fish, eggs.\nBolting: Once it flowers, leaves lose flavour. Succession sow every 3–4 weeks.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Chives',
+        content: `One of the most reliable, low-maintenance herbs for indoors.\nLight: 4–6h — tolerates lower light than most herbs.\nWatering: Moderate. Let soil dry slightly between waterings.\nHarvest: Cut to 1–2 inches from the base. Regrows quickly and repeatedly.\nFlowers: Edible — beautiful in salads. But pinching off prolongs leaf harvest.\nDivision: Divide clumps every year or two to keep them vigorous.\nGrowth: Goes dormant in winter if placed in a cold spot. Keep warm for year-round harvest.\nPropagation: Divide existing clumps or grow from seed (slow, 2–3 weeks germination).`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Cilantro',
+        content: `Fastest-bolting herb — succession sow every 2–3 weeks for continuous supply.\nLight: 4–6h. Bolts faster in high heat and bright light — moderate light helps.\nTemperature: Prefers cool (60–70°F / 15–21°C). Heat triggers bolting.\nSowing: Direct sow — dislikes transplanting. Lightly crush seeds before sowing.\nHarvest: Cut outer stems once 6 inches tall. Never take more than 1/3 at once.\nBolting: Once flower stalks appear, harvest everything — leaves lose flavour quickly.\nBonus: Let it bolt and harvest the coriander seeds when the plant dries out.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥒', category: 'Cucumber',
+        content: `Best indoor varieties: Bush Pickle, Patio Snacker, Spacemaster, Salad Bush.\nLight: Very demanding — 8+ hours bright sun or strong grow lights.\nPollination: Male flowers appear first (no bump behind petal). Female flowers have a tiny cucumber. Transfer pollen with a soft brush or cotton swab.\nSupport: Train vines up a trellis or bamboo stake to save space.\nWatering: Keep consistently moist. Inconsistent watering = bitter, misshapen fruit.\nHarvesting: Pick every 2–3 days to encourage more fruit. Don't let them over-ripen.\nIdeal temp: 70–85°F (21–29°C). Cold stresses the plant significantly.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Dill',
+        content: `Fast-growing, feathery herb. Best grown in successive sowings.\nLight: 6–8h of bright light. Dill gets leggy without adequate light.\nHeight: Can reach 3 feet — choose dwarf varieties (Fernleaf) for containers.\nSowing: Direct sow — resents transplanting. Germinates in 7–14 days.\nHarvest: Snip fronds from the top before flowers form.\nBolting: Bolts in heat. Harvest frequently to delay.\nSeeds: Once flowering, let some go to seed — dill seeds are also excellent in cooking.\nCompanion note: Keep away from fennel — they cross-pollinate and affect flavour.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍆', category: 'Eggplant',
+        content: `Requires high light and warmth — one of the more challenging indoor crops.\nLight: 8+ hours. Insufficient light = no fruit.\nVarieties: Slim Japanese or Thai types are more compact and productive indoors.\nPollination: Self-pollinating but benefits from gentle shaking or a brush.\nTemperature: 70–85°F (21–29°C). Very sensitive to cold — below 55°F damages plants.\nWatering: Keep consistently moist. Drought causes bitter, spongy flesh.\nFertilizing: High potassium once flowering. Heavy feeder overall.\nHarvest: Pick when skin is glossy. Dull skin = overripe and seedy.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Fennel',
+        content: `Grow Florence fennel for bulbs; common fennel for fronds and seeds.\nLight: 6–8h of bright light. Gets leggy without enough.\nContainer: Deep pot (12+ inches) — fennel has a long taproot.\nWatering: Moderate. Allow top inch to dry between waterings.\nHarvest (fronds): Snip as needed once plant is established.\nHarvest (bulb): Harvest Florence fennel when bulb reaches tennis-ball size.\nNote: Keep away from most other plants — fennel is allelopathic (inhibits growth of neighbours).\nSeeds: Let some plants bolt and collect seeds for cooking.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍈', category: 'Fig',
+        content: `A rewarding indoor tree with the right variety and space.\nBest varieties: Petite Negra, Little Miss Figgy, Brown Turkey (compact).\nLight: 6–8h of bright direct sun. A south-facing window is ideal.\nContainer: Start in a 10–12 inch pot. Repot every 2–3 years.\nWatering: Allow top 2 inches to dry between waterings. Very drought-tolerant.\nDormancy: Loses leaves in winter — this is normal. Reduce watering during dormancy.\nFertilizing: Feed monthly during growing season with balanced fertilizer.\nHarvest: Figs are ripe when they hang slightly, feel soft, and may weep a drop of nectar.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🧄', category: 'Garlic',
+        content: `Planting: Break bulb into cloves, plant pointed-end up, 1 inch deep.\nLight: 6–8h. Tolerates slightly lower light than most vegetables.\nWatering: Water when the top inch of soil is dry. Do not overwater.\nHarvest (greens): Snip tops at any time for fresh garlic flavour — they regrow.\nHarvest (bulbs): Takes 8–9 months. Better suited to outdoor growing for full bulbs.\nQuick crop: Plant multiple cloves close together; harvest greens continuously like herbs.\nContainer: At least 6 inches deep for greens; 8–12 inches for bulbs.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Green Onion',
+        content: `Easiest indoor vegetable — regrow from store-bought root ends.\nWater method: Place roots in 1 inch of water. Change water every 2 days. Harvest repeatedly for weeks.\nSoil method: Transplant rooted scraps to soil for more robust growth and flavour.\nFrom seed: Ready in 3–4 weeks. Sow densely, thin to 1 inch apart.\nHarvest: Snip from top, always leaving 1+ inch of green so the plant regrows.\nLight: 4–6h — one of the most shade-tolerant edibles.\nNo fertilizer needed for water-grown plants. Feed soil-grown ones monthly.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌶️', category: 'Hot Pepper',
+        content: `Best compact varieties: NuMex Twilight, Tabasco, Lemon Drop, Thai chili.\nLight: 8+ hours or 16h under grow lights — same as tomatoes.\nPollination: Shake gently or use a brush. Mostly self-pollinating.\nOverwintering: Cut back by 2/3 in autumn, keep bright and warm. Peppers are perennial — same plant for years.\nHeat: Mild water stress during fruiting increases capsaicin (heat) in hot varieties.\nFertilizing: High potassium when fruiting. Avoid excess nitrogen.\nTemp: Ideal 70–85°F (21–30°C). Sensitive to cold — keep above 55°F.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥬', category: 'Kale',
+        content: `Cold-hardy and nutritious — one of the best winter indoor crops.\nLight: 4–6h — performs well under grow lights.\nVarieties: Dwarf Siberian, Redbor, or Lacinato (Tuscan/dinosaur kale) for containers.\nHarvest: Cut outer leaves only; the plant keeps producing from the centre.\nFlavour: Flavour improves after a cold snap — move near a cool window in winter.\nContainer: At least 8 inches deep. Kale has significant roots.\nFertilizing: Feed every 3–4 weeks with nitrogen-rich fertilizer for leafy growth.\nSow to harvest: About 55–70 days from seed.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥦', category: 'Kohlrabi',
+        content: `Fast-growing, space-efficient brassica. The bulb (actually a swollen stem) is the edible part.\nLight: 6h minimum. More light = faster growth.\nTemperature: Cool-season crop (60–70°F / 15–21°C). Bolts in sustained heat.\nThinning: Thin to 4–5 inches apart for bulb development.\nHarvest: Pick bulbs at 2–3 inches diameter — before they get woody.\nSow to harvest: 45–60 days.\nFlavour: Mild, crispy, slightly sweet — like the heart of broccoli.\nNote: Both the bulb and the leaves are edible (leaves cook like kale).`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '💜', category: 'Lavender',
+        content: `Needs excellent drainage and strong light — the most common failure is overwatering.\nLight: 6–8h bright direct sun. Grows leggy and weak without enough.\nSoil: Well-draining, slightly alkaline (add lime or perlite generously).\nWatering: Allow to dry out fully between waterings. Lavender is very drought-tolerant.\nTemperature: Prefers cooler nights (55–65°F / 13–18°C) — helps trigger blooming.\nPruning: After flowering, cut back by 1/3 to keep bushy and prevent woodiness.\nVarieties: Hidcote and Vera are more compact and better for containers.\nNote: French lavender (L. dentata) adapts better to indoor conditions.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥬', category: 'Leek',
+        content: `Slow-growing but space-efficient. Grow baby leeks for faster results.\nLight: 6+ hours. More light = thicker, more flavourful stems.\nContainer: 8–10 inches deep. Grow multiple leeks per pot.\nHarvest (baby leeks): At pencil thickness, 60–70 days. Harvest whole plant.\nHarvest (full leeks): 100–130 days. Pull when stem base is 1+ inch thick.\nBlanching: Mound soil around the base to keep stems white and mild.\nFrom scraps: Stand leek root base in water to regrow green tops for fresh flavour.\nFertilizing: Nitrogen-heavy feed every 3–4 weeks.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍋', category: 'Lemon',
+        content: `Meyer lemon is the best choice for indoors — smaller, more cold-tolerant, and reliably fruiting.\nLight: 8+ hours of direct sun. A south-facing window is ideal.\nContainer: 10–14 inch pot with excellent drainage.\nWatering: Let top 2 inches dry between waterings. Never let roots sit in water.\nHumidity: 50%+ humidity is important. Mist regularly or use a humidifier.\nPollination: Hand-pollinate with a brush during flowering.\nFertilizing: Citrus-specific fertilizer (high nitrogen + micronutrients) every 4–6 weeks.\nNote: Dropping leaves = usually overwatering or temperature shock.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Lemon Balm',
+        content: `Easy-to-grow, vigorous herb with a mild lemon scent. Great for teas.\nLight: 4–6h. Tolerates lower light than most herbs.\nGrowth: Very vigorous — trim regularly to prevent legginess and keep bushy.\nWatering: Moderate. Tolerates both dry and moist conditions.\nHarvest: Cut stems back by half regularly. Encourages bushy, productive growth.\nUse: Fresh leaves in tea, salads, desserts. Dried for tea.\nNote: Closely related to mint — same vigorous growth habits. Give it its own pot.\nPropagation: Easily divided or grown from cuttings in water.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥗', category: 'Lettuce',
+        content: `One of the easiest indoor crops — tolerates lower light than most edibles.\nVarieties: Loose-leaf types (Black Seeded Simpson, Oak Leaf, Butterhead) are best for cut-and-come-again.\nHarvest: Take outer leaves only, letting the centre keep growing. One plant can produce for months.\nSuccession planting: Sow a few seeds every 2–3 weeks for continuous harvest.\nTemperature: Prefers cool conditions 60–70°F (15–21°C). Bolts and turns bitter in heat.\nGermination: Soak seeds overnight in cool water for faster sprouting.\nLight: 3–5h is enough. Lettuce is the most shade-tolerant edible food crop.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍈', category: 'Lime',
+        content: `Kaffir lime (for leaves) and Persian lime are the best indoor choices.\nLight: 8+ hours of bright direct sun. Essential for fruiting.\nKaffir lime: Grow for the aromatic leaves used in Southeast Asian cooking. Less demanding than fruiting types.\nWatering: Let top 2 inches dry between waterings. Good drainage is critical.\nHumidity: Citrus needs 50%+ humidity. Dry air causes leaf drop.\nFertilizing: Citrus-specific fertilizer every 4–6 weeks in growing season.\nPollination: Hand-pollinate flowers with a soft brush.\nTemp: Keep above 55°F at all times. No cold drafts.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Marjoram',
+        content: `Milder, sweeter cousin of oregano. Often grown as an annual indoors.\nLight: 6h of bright light. Similar requirements to oregano and thyme.\nWatering: Allow to dry between waterings. Mediterranean herb — drought tolerant.\nHarvest: Cut stems back by 1/3 regularly. Harvest before flowers fully open for best flavour.\nUse: Italian cooking, soups, meat dishes. Substitute for oregano but sweeter.\nPropagation: Easy from cuttings — place stem in water until roots appear.\nNote: Tender marjoram (sweet marjoram) is the most commonly grown variety for cooking.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌱', category: 'Microgreens',
+        content: `Fastest indoor crop — most varieties ready in 7–14 days from seed.\nBest varieties: Radish, sunflower, peas, broccoli, kale, arugula, basil, red cabbage.\nSetup: Shallow tray (1–2 inches deep), potting mix or coco coir, dense seed sowing.\nGermination: Cover with a second tray or dome for 3–4 days — moisture + darkness.\nHarvesting: Cut just above soil line when cotyledons fully open (or first true leaf).\nLight: Once uncovered, bright light or grow lights to prevent legginess.\nNo fertilizer needed — seeds carry all nutrients for this short growth stage.\nRinse and eat immediately for best flavour and nutrition.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Mint',
+        content: `Extremely vigorous — always grow in its own pot to prevent takeover.\nLight: 3–6h. One of the most shade-tolerant herbs.\nWatering: Prefers consistently moist soil — unlike most herbs.\nHarvest: Cut stems back by half frequently. Encourages dense, bushy growth.\nPinching: Pinch off flowers to keep leaves coming. Flowering reduces flavour.\nVarieties: Spearmint (most common), peppermint (stronger), chocolate mint, apple mint.\nPropagation: Place any stem cutting in water — roots in 1 week. Almost impossible to kill.\nNote: Mint spreads aggressively via underground runners. Pot containment is essential.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥬', category: 'Mustard Greens',
+        content: `Fast-growing, spicy greens. One of the easiest indoor crops.\nLight: 4–6h. Tolerates lower light well.\nTemperature: Cool-season crop — bolts quickly in heat above 75°F.\nSow to harvest: 20–40 days for baby greens; 45–60 days for full leaves.\nHarvest: Cut-and-come-again method. Outer leaves first.\nFlavour: Baby leaves are mild; mature leaves are peppery and strong.\nSuccession sow: Every 2–3 weeks for continuous supply.\nNote: Very cold tolerant — can handle near-freezing temps making it a great winter crop.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Okra',
+        content: `One of the more challenging crops indoors due to light and heat requirements.\nLight: 8+ hours. Grow lights almost essential in Canada.\nTemperature: Tropical crop — needs consistent warmth, 75–90°F (24–32°C).\nContainer: At least 3 gallons. Dwarf varieties (Baby Bubba, Dwarf Long Pod) are most practical.\nWatering: Moderate. Allow top inch to dry between waterings.\nHarvest: Pick pods at 3–4 inches — larger pods become tough and fibrous. Harvest every 2–3 days.\nNote: Plants grow tall — be prepared for a 3–4 foot plant indoors.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Oregano',
+        content: `Drought-tolerant Mediterranean herb — thrives with neglect (within reason).\nLight: 6–8h of bright light. The most important factor for flavour concentration.\nWatering: Allow to dry fully between waterings. Overwatering is the main risk.\nHarvest: Cut stems back by 1/3 regularly before flowers open.\nFlavour: Strongest just before flowering — harvest heavily at this point.\nVarieties: Greek oregano is the most intensely flavoured. Italian oregano is milder.\nPropagation: Easy from cuttings in water or direct in soil.\nDrying: Easy to dry — hang bunches upside down for 1–2 weeks.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Parsley',
+        content: `Slow to germinate but reliable once established. Biennial — best grown as annual.\nLight: 4–6h. One of the more shade-tolerant culinary herbs.\nGermination: 3–4 weeks. Soak seeds 24h in warm water to speed germination.\nHarvest: Always cut outer stems from the base. Leave inner stems to continue growing.\nNote: Second-year plants bolt quickly — replace annually for consistent harvest.\nVarieties: Flat-leaf (Italian) has stronger flavour; curly is milder and more decorative.\nWatering: Keep consistently moist — parsley dislikes drying out.\nFertilizing: Monthly with balanced fertilizer.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌱', category: 'Pea',
+        content: `Dwarf and bush varieties are most practical for indoor growing.\nVarieties: Tom Thumb, Little Marvel, Sugar Ann (snap pea), Snowflake.\nLight: 6h minimum. More light = more pods.\nTemperature: Cool-season crop (55–70°F / 13–21°C). Heat stops pod production.\nSupport: Even dwarf types benefit from a small trellis or sticks.\nWatering: Keep consistently moist. Do not let soil dry out during flowering.\nSow to harvest: 55–70 days.\nPollination: Self-pollinating — no assistance needed.\nNote: Peas fix nitrogen — great companion for container herbs after harvest.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥔', category: 'Potato',
+        content: `Container potatoes are fun and surprisingly productive with the right setup.\nVarieties: Fingerling, Yukon Gold, or "new potato" types — choose smaller/faster varieties.\nContainer: Large bag or 5-gallon pot. "Grow bag" method works best indoors.\nPlanting: Chit (pre-sprout) seed potatoes for 2 weeks in light before planting.\nLight: 6+ hours. More light = better yield.\nHilling: Cover stems as they grow — each buried stem produces more potatoes.\nHarvest: After tops die back (90–120 days). Dig up entire container.\nWatering: Consistent moisture, especially once tubers begin forming.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌱', category: 'Radish',
+        content: `One of the fastest crops indoors — ready in 20–30 days.\nLight: 4–6h. Lower light produces more leaves, less root development.\nContainer: At least 6 inches deep. Don't crowd — thin to 2 inches apart.\nTemperature: Cool-season crop (50–65°F / 10–18°C). Heat causes pithy, hot roots.\nSow to harvest: 20–30 days (round types), 60 days (daikon/long types).\nHarvest: Don't delay — radishes become hollow and very hot if left too long.\nSuccession sow: Every 2 weeks for continuous harvest.\nNote: Daikon and French Breakfast types grow well indoors; Cherry Belle is classic.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍓', category: 'Raspberry',
+        content: `Compact and heritage varieties can produce indoors with commitment.\nBest varieties: Heritage, Raspberry Shortcake (thornless, dwarf), Autumn Bliss.\nLight: 8+ hours. Grow lights help in Canada's short winters.\nContainer: 5+ gallon, deep pot.\nChill requirement: Most raspberries need winter chill hours (below 45°F). Autumn-bearing types are easier.\nWatering: Consistent moisture but well-drained. Roots must never sit in water.\nFertilizing: Balanced feed in spring; high potassium when fruiting.\nNote: Raspberry Shortcake is bred for container growing and is the most practical choice.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Rosemary',
+        content: `Needs excellent drainage and strong light. Most common cause of death is root rot.\nLight: 6–8h direct sun. Struggles in low-light Canadian winters — use grow lights.\nWatering: Allow to dry out almost completely between waterings.\nSoil: Very well-draining — add 30% perlite or use a cactus mix.\nHumidity: Rosemary actually prefers drier air. Keep away from humidifiers.\nPruning: Prune after flowering to maintain shape. Don't cut into old woody stems.\nPropagation: Stem cuttings root easily in water or perlite.\nNote: Yellow, dropping needles = usually overwatering. Pale, leggy = not enough light.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Sage',
+        content: `Woody Mediterranean herb. Easy once established with the right conditions.\nLight: 6–8h of bright direct light.\nWatering: Allow soil to dry between waterings. Drought-tolerant once established.\nHarvest: Cut young stem tips regularly to keep the plant bushy.\nFlavour: Strongest just before and during flowering.\nPruning: Cut back by 1/3 after flowering. Avoid cutting into old wood.\nVarieties: Common sage (Salvia officinalis) is best for cooking. Purple and tricolor varieties are decorative but also edible.\nNote: Sage is slow-growing — don't over-harvest a young plant.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🧅', category: 'Shallot',
+        content: `Easier to grow indoors than onions due to smaller size.\nPlanting: Push shallot sets 1 inch into soil, tip just visible.\nLight: 6h minimum. More light = more vigorous growth.\nContainer: At least 6 inches deep. Can grow multiple per pot.\nWatering: Moderate. Allow top inch to dry between waterings.\nHarvest (greens): Snip tops at any time like green onions.\nHarvest (bulbs): When tops begin to yellow and fall over (90–120 days).\nStorage: Dry in a warm, airy spot for 2–3 weeks before storing.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Sorrel',
+        content: `Perennial herb with a pleasantly sour, lemony flavour. Underrated for indoor growing.\nLight: 4–6h. Tolerates partial shade well.\nWatering: Keep consistently moist. Sorrel dislikes drying out.\nHarvest: Cut outer leaves regularly. Goes dormant in deep winter but regrows.\nFlavour: Young leaves are mild; older leaves are sharper and more acidic.\nUse: Soups, sauces, salads, eggs. Classic French sorrel soup.\nNote: Let the plant establish for a full season before heavy harvesting.\nDivision: Divide clumps every 2–3 years to keep productive.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥗', category: 'Spinach',
+        content: `Cool-season crop — perfect for indoor growing in Canadian winters.\nLight: 3–5h — very shade-tolerant. Excellent under grow lights.\nTemperature: 50–65°F (10–18°C). Bolts quickly above 75°F.\nSow to harvest: Baby leaves in 25 days; full leaves in 40–50 days.\nHarvest: Cut-and-come-again. Take outer leaves and the plant regrows.\nBolting: Hot temperatures or long days trigger bolting. Harvest quickly when it starts.\nVarieties: Bloomsdale is a reliable standby. Tyee and Melody are bolt-resistant.\nFertilizing: Nitrogen-rich feed for leafy growth. Feed every 3–4 weeks.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Stevia',
+        content: `Natural sweetener herb — leaves are 200–300× sweeter than sugar.\nLight: 6–8h of bright light. Needs warmth and sun to produce sweet leaves.\nWatering: Keep consistently moist but never waterlogged.\nHarvest: Cut stems back regularly — more branching = more leaves.\nFlavour: Sweetness is highest just before flowering. Harvest heavily at this point.\nDrying: Air dry leaves and crumble for use as a sweetener.\nTemperature: Tropical plant — needs 65–85°F. Does not tolerate frost.\nNote: Can be grown as a perennial if kept warm and brought indoors before frost.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍓', category: 'Strawberry',
+        content: `Day-neutral varieties (Albion, Seascape, Tristar) produce year-round indoors.\nLight: 6–8h bright sun or 12+ hours under grow lights.\nSoil: Slightly acidic (pH 5.5–6.5). Add a little peat to standard potting mix.\nRunners: Remove to focus energy on fruit. Pot separately if you want new plants.\nPollination: Brush flowers with a soft paintbrush for better fruit set indoors.\nFertilizing: High-potassium fertilizer when flowers and fruit appear.\nReplanting: Replace plants every 2–3 years — yield declines with age.\nContainer: At least 8 inches wide and deep. Hanging baskets work well.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥬', category: 'Swiss Chard',
+        content: `Ornamental and edible — colourful stems make a stunning indoor plant.\nLight: 4–6h. More shade-tolerant than most brassicas.\nVarieties: Rainbow chard (multi-coloured) is beautiful. Fordhook Giant is very productive.\nHarvest: Cut outer leaves at the base. Centre keeps producing.\nSow to harvest: 50–60 days for full size; 30 days for baby leaves.\nContainer: At least 8 inches deep.\nFertilizing: Nitrogen-rich feed every 3–4 weeks.\nNote: Handle leaves gently — stems and leaves bruise easily. Harvest into a bowl, not a bag.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Tarragon',
+        content: `French tarragon (not Russian) is the variety used in cooking — must be grown from division, not seed.\nLight: 6h of bright light.\nWatering: Allow to dry slightly between waterings. Moderate drought tolerance.\nNote: Only French tarragon has genuine anise flavour. Russian tarragon grown from seed has very little flavour.\nHarvest: Cut stems back by half regularly. Harvest before flowering for best flavour.\nDormancy: Goes dormant in winter — this is normal. Resume watering when new growth appears.\nPropagation: Division or stem cuttings only (French tarragon is sterile — no viable seeds).\nUse: Classic French cuisine — Béarnaise sauce, chicken, fish, eggs.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Thyme',
+        content: `Very hardy, drought-tolerant herb. One of the easiest to grow indoors.\nLight: 6h of bright light. Flavour is most concentrated with maximum light.\nWatering: Allow to dry fully between waterings. Root rot is the main risk.\nHarvest: Clip stem tips regularly. Harvest before or during flowering for peak flavour.\nPruning: After flowering, cut back by 1/3 to prevent woodiness.\nVarieties: Common thyme (Thymus vulgaris) is best for cooking. Lemon thyme is a fragrant alternative.\nPropagation: Very easy from stem cuttings in water.\nNote: Thyme is a perennial — one plant can last many years with good care.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍅', category: 'Tomatillo',
+        content: `Papery-husked relative of tomato. Underused for indoor growing but very rewarding.\nLight: 8+ hours or strong grow lights.\nPollination: Tomatillos are NOT self-fertile — you need at least TWO plants.\nGrowth: Vigorous grower — stake or cage as for tomatoes.\nHusk: The papery husk splits and fruit is ripe when it fills the husk and turns yellow/purple.\nFertilizing: Same as tomatoes — switch to high-potassium when flowering.\nTemp: 65–85°F (18–29°C). Similar to tomatoes in requirements.\nUse: Salsa verde, Mexican cooking. Unique tart flavour different from tomatoes.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🍅', category: 'Tomato',
+        content: `Best indoor varieties: Tiny Tim, Tumbling Tom, Micro Tom, Sweet 100, Red Robin.\nLight: 8+ hours bright sun or 16h under grow lights.\nPollination: Shake flowering stems gently daily, or use a small brush between flowers.\nSupport: Indeterminate types need staking or caging. Bush types stay compact.\nWatering: Keep consistently moist. Irregular watering = blossom end rot and cracking.\nFertilizing: Switch to high-phosphorus/potassium fertilizer when flowers appear.\nPruning: Pinch suckers on indeterminate varieties for better yield and airflow.\nIdeal temp: 65–80°F (18–27°C). Below 55°F stops fruit set.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🟡', category: 'Turmeric',
+        content: `Tropical rhizome — grows as an ornamental plant with edible reward.\nPlanting: Plant fresh turmeric rhizome (from grocery store) 2 inches deep.\nLight: Bright indirect light. Tolerates lower light than most tropical crops.\nTemperature: Needs warmth — 65–85°F (18–29°C). Very frost-sensitive.\nGrowth: Dramatic, leafy tropical appearance. Grows 3–4 feet tall.\nHarvest: After 8–10 months, when leaves yellow and die back. Dig up rhizomes.\nStorage: Cure at room temperature for 1 week then store in a cool, dry place.\nNote: Grows slowly — be patient. The harvest is worth the wait.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🌿', category: 'Watercress',
+        content: `Aquatic herb — easiest grown in a water container indoors.\nWater method: Place stems in a container of water changed every 2–3 days. Grows rapidly.\nSoil method: Keep soil very wet (set pot in a tray of water). More flavourful result.\nLight: 4–6h. Tolerates indirect light well.\nHarvest: Cut stems regularly. Always leave several leaves so the plant regrows.\nFlavour: Peppery and bright. Best used fresh — doesn't cook well.\nNote: Use filtered or aged tap water — chlorine can inhibit growth.\nSow to harvest: 3–4 weeks from seed.`,
+        updatedAt: new Date().toISOString() },
+      { id: uuid(), emoji: '🥒', category: 'Zucchini',
+        content: `Possible indoors with very strong light — a fun challenge.\nVarieties: Bush types only: Patio Star, Eight Ball, Bush Baby.\nLight: 8+ hours — one of the most light-hungry crops.\nContainer: At least 5 gallons. Large plant with big roots.\nPollination: Manual essential. Male flowers (long thin stem) appear first. Transfer pollen to female flowers (tiny zucchini behind petal) with a brush.\nHarvest: Pick at 6–8 inches. Waiting longer slows production and stresses the plant.\nWatering: Heavy drinker — check daily. Wilt quickly when dry.\nNote: Expect a large, sprawling plant. Best grown near a big south window.`,
+        updatedAt: new Date().toISOString() },
       {
         id: uuid(), emoji: '🌿', category: 'Green Onions',
         content: `Regrowing from scraps: Place store-bought root ends in 1 inch of water. Roots appear within days.\nWater method: Change water every 2 days. Harvest outer leaves and they keep regrowing for weeks.\nSoil method: Transplant rooted scraps to soil for more robust growth and flavour.\nFrom seed: Ready in 3–4 weeks. Sow densely, thin to 1 inch apart.\nHarvesting: Snip from the top, always leaving at least 1 inch of green so the plant regrows.\nLight: 4–6h of light is enough — one of the most shade-tolerant edibles.\nNo fertilizer needed for water-grown plants. Feed soil-grown ones monthly.`,
@@ -1145,6 +1393,7 @@ async function init() {
       },
     ];
     DB.saveKnowledge(knowledgeCards);
+    const s = DB.getSettings(); s.knowledgeVersion = '2'; DB.saveSettings(s);
   }
 
   renderDashboard();

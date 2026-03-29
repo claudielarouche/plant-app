@@ -93,6 +93,11 @@ a{color:var(--g3);text-decoration:none}
 .knowledge-edit-btn{font-size:12px;font-weight:600;color:var(--g3);padding:3px 8px;border-radius:20px;border:1.5px solid var(--g6);background:var(--g7);transition:background .15s}
 .knowledge-edit-btn:active{background:var(--g6)}
 .knowledge-preview{font-size:12px;color:var(--text3);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Knowledge inline editor (plant detail) */
+.knowledge-inline-editor{width:100%;min-height:320px;background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:14px;font-size:13px;line-height:1.7;color:var(--text);resize:vertical;font-family:inherit;transition:border-color .15s;box-sizing:border-box}
+.knowledge-inline-editor:focus{border-color:var(--g4);outline:none}
+.autosave-indicator{font-size:11px;color:var(--text3);margin-left:auto}
+.knowledge-no-type{font-size:13px;color:var(--text3);padding:24px 0;text-align:center}
 @media(prefers-color-scheme:dark){.badge-inactive{background:var(--border2);color:var(--text3)}}
 /* Empty state */
 .empty-state{text-align:center;padding:60px 24px;color:var(--text3)}
