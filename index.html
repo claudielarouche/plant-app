@@ -164,8 +164,8 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label" for="plantType">Type / Category</label>
-          <select id="plantType">
-            <option value="">— select —</option>
+          <input type="text" id="plantType" list="plantTypeList" placeholder="e.g. Tomato, Herb, Succulent…" autocomplete="off">
+          <datalist id="plantTypeList">
             <option>Tomato</option>
             <option>Herb</option>
             <option>Green onion</option>
@@ -182,8 +182,7 @@
             <option>Fruit</option>
             <option>Vegetable</option>
             <option>Tree / Shrub</option>
-            <option>Other</option>
-          </select>
+          </datalist>
         </div>
         <div class="form-group">
           <label class="form-label" for="plantStart">Start date</label>
