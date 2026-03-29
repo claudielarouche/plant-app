@@ -1218,7 +1218,6 @@ function updateSyncDesc() {
   const syncNowRow = document.getElementById('syncNowRow');
   const headerSyncBtn = document.getElementById('headerSyncBtn');
   if (!desc) return;
-  const syncNowRow = document.getElementById('syncNowRow');
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
