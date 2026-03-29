@@ -28,9 +28,19 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid or missing garden ID' }) };
   }
 
+  const siteID = process.env.SITE_ID;
+  const token = process.env.NETLIFY_TOKEN;
+
+  if (!siteID || !token) {
+    return { statusCode: 500, headers, body: JSON.stringify({
+      error: 'Missing configuration',
+      detail: `SITE_ID=${siteID ? 'set' : 'MISSING'}, NETLIFY_TOKEN=${token ? 'set' : 'MISSING — add this in Site configuration → Environment variables'}`
+    })};
+  }
+
   let store;
   try {
-    store = getStore('garden-journal');
+    store = getStore({ name: 'garden-journal', siteID, token });
   } catch (err) {
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Could not initialise store', detail: err.message }) };
   }
