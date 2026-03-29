@@ -83,6 +83,7 @@ a{color:var(--g3);text-decoration:none}
 .badge-red{background:#fdecea;color:#c0392b}
 .badge-earth{background:var(--e6);color:var(--e2)}
 .badge-blue{background:#e3f2fd;color:#1565c0}
+.badge-age{background:var(--g7);color:var(--g2)}
 @media(prefers-color-scheme:dark){
   .badge-orange{background:#2a1e00;color:#e8a820}
   .badge-red{background:#2a0e0e;color:#e87070}

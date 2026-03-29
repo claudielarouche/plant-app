@@ -20,6 +20,17 @@ const daysSince = (dateStr) => {
   return Math.floor(ms / 86400000);
 };
 
+const plantCardAge = (startDate) => {
+  if (!startDate) return '';
+  const days = daysSince(startDate);
+  if (days === null || days < 0) return '';
+  if (days < 7)   return `${days}d old`;
+  if (days < 30)  { const w = Math.floor(days / 7); return `${w}w old`; }
+  if (days < 365) { const m = Math.floor(days / 30); const w = Math.floor((days % 30) / 7); return w > 0 ? `${m}mo ${w}w old` : `${m}mo old`; }
+  const y = Math.floor(days / 365); const m = Math.floor((days % 365) / 30);
+  return m > 0 ? `${y}yr ${m}mo old` : `${y}yr old`;
+};
+
 const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
@@ -286,6 +297,8 @@ function renderDashboard() {
     const activityBadge = daysSinceAny !== null
       ? `<span class="badge badge-earth">${actionEmoji(lastAction.action)} ${daysSinceAny === 0 ? 'Today' : daysSinceAny + 'd ago'}</span>` : '';
     const inactiveBadge = inactive ? `<span class="badge badge-inactive">Inactive</span>` : '';
+    const age = plantCardAge(plant.startDate);
+    const ageBadge = age ? `<span class="badge badge-age">🌱 ${age}</span>` : '';
     return `<div class="plant-card${inactive ? ' inactive' : ''}" onclick="showDetail('${esc(plant.id)}')">
       <div class="plant-card-header">
         <div class="plant-icon">${esc(plant.emoji || '🌱')}</div>
@@ -295,7 +308,7 @@ function renderDashboard() {
           ${plant.location ? `<div class="plant-location"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
         </div>
       </div>
-      <div class="plant-card-meta">${inactiveBadge}${activityBadge}</div>
+      <div class="plant-card-meta">${inactiveBadge}${ageBadge}${activityBadge}</div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
         <button class="quick-btn quick-btn-note" onclick="openAddLog('${esc(plant.id)}')">📝 Note</button>
       </div>
