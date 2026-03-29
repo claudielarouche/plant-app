@@ -1202,14 +1202,18 @@ function updateSyncDesc() {
   const syncNowRow = document.getElementById('syncNowRow');
   const headerSyncBtn = document.getElementById('headerSyncBtn');
   if (!desc) return;
+  const syncPullRow = document.getElementById('syncPullRow');
+  const syncPushRow = document.getElementById('syncPushRow');
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
-    if (syncNowRow) syncNowRow.style.display = '';
+    if (syncPullRow) syncPullRow.style.display = '';
+    if (syncPushRow) syncPushRow.style.display = '';
     if (headerSyncBtn) headerSyncBtn.style.display = '';
   } else {
     desc.textContent = 'Share your garden across devices';
-    if (syncNowRow) syncNowRow.style.display = 'none';
+    if (syncPullRow) syncPullRow.style.display = 'none';
+    if (syncPushRow) syncPushRow.style.display = 'none';
     if (headerSyncBtn) headerSyncBtn.style.display = 'none';
   }
 }
@@ -1220,10 +1224,9 @@ async function headerSync() {
   if (btn) btn.disabled = true;
   if (icon) icon.style.animation = 'spin 1s linear infinite';
   try {
-    await Sync.push();
     const pulled = await Sync.pull();
     if (pulled) { renderDashboard(); renderKnowledge(); }
-    showToast('Synced ✓');
+    showToast('Pulled latest ✓');
   } catch (e) {
     showToast('Sync failed');
   } finally {
@@ -1233,22 +1236,28 @@ async function headerSync() {
   }
 }
 
-async function forcSync() {
-  const btn = document.getElementById('syncNowBtn');
-  const desc = document.getElementById('syncNowDesc');
+async function forcSync(direction) {
+  const isPush = direction === 'push';
+  const btn = document.getElementById(isPush ? 'syncPushBtn' : 'syncPullBtn');
+  const desc = document.getElementById(isPush ? 'syncPushDesc' : 'syncPullDesc');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  if (desc) desc.textContent = 'Syncing…';
+  if (desc) desc.textContent = isPush ? 'Uploading…' : 'Downloading…';
   try {
-    await Sync.push();
-    const pulled = await Sync.pull();
-    if (pulled) { renderDashboard(); renderKnowledge(); }
-    if (desc) desc.textContent = 'Synced just now ✓';
-    showToast('Synced ✓');
+    if (isPush) {
+      await Sync.push();
+      if (desc) desc.textContent = 'Uploaded ✓';
+      showToast('Pushed to server ✓');
+    } else {
+      const pulled = await Sync.pull();
+      if (pulled) { renderDashboard(); renderKnowledge(); }
+      if (desc) desc.textContent = 'Downloaded ✓';
+      showToast('Pulled latest ✓');
+    }
   } catch (e) {
-    if (desc) desc.textContent = 'Sync failed — check connection';
+    if (desc) desc.textContent = 'Failed — check connection';
     showToast('Sync failed');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Sync'; }
+    if (btn) { btn.disabled = false; btn.textContent = isPush ? 'Push' : 'Pull'; }
     updateSyncDesc();
   }
 }

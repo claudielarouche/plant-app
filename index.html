@@ -121,13 +121,21 @@
         </div>
         <button class="settings-row-action" onclick="openSyncSetup()">Setup</button>
       </div>
-      <div class="settings-row" id="syncNowRow" style="display:none">
-        <div class="settings-row-icon" style="background:var(--g7)">☁️</div>
+      <div class="settings-row" id="syncPullRow" style="display:none">
+        <div class="settings-row-icon" style="background:var(--g7)">⬇️</div>
         <div class="settings-row-text">
-          <div class="settings-row-label">Sync Now</div>
-          <div class="settings-row-desc" id="syncNowDesc">Push &amp; pull latest data</div>
+          <div class="settings-row-label">Pull from server</div>
+          <div class="settings-row-desc" id="syncPullDesc">Fetch latest data from other devices</div>
         </div>
-        <button class="settings-row-action" id="syncNowBtn" onclick="forcSync()">Sync</button>
+        <button class="settings-row-action" id="syncPullBtn" onclick="forcSync('pull')">Pull</button>
+      </div>
+      <div class="settings-row" id="syncPushRow" style="display:none">
+        <div class="settings-row-icon" style="background:var(--g7)">⬆️</div>
+        <div class="settings-row-text">
+          <div class="settings-row-label">Push to server</div>
+          <div class="settings-row-desc" id="syncPushDesc">Upload this device's data</div>
+        </div>
+        <button class="settings-row-action" id="syncPushBtn" onclick="forcSync('push')">Push</button>
       </div>
     </div>
   </div>
