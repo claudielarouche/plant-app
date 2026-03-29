@@ -159,7 +159,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.5</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.6</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -301,7 +301,7 @@ function renderDetail(plantId) {
           <div class="entry-action">${capitalize(log.action)}</div>
           <div class="entry-date">${formatDate(log.date)}</div>
           ${log.notes ? `<div class="entry-notes">${esc(log.notes)}</div>` : ''}
-          ${log.photo ? `<img class="entry-photo" src="${log.photo}" loading="lazy" alt="log photo" onclick="openPhotoViewer('${encodeURIComponent(log.photo)}')">` : ''}
+          ${log.photo ? `<img class="entry-photo" src="${log.photo}" loading="lazy" alt="log photo" onclick="openLogPhoto('${encodeURIComponent(log.photo)}','${log.date || ''}','${plant.startDate || ''}')">` : ''}
           <div class="entry-actions">
             <button class="entry-action-btn" onclick="editLog('${esc(log.id)}')">Edit</button>
             <button class="entry-action-btn" style="color:var(--red)" onclick="confirmDeleteLog('${esc(log.id)}')">Delete</button>
@@ -313,7 +313,7 @@ function renderDetail(plantId) {
   }).join('');
 
   const photosHTML = (plant.photos || []).map((ph, i) =>
-    `<img class="photo-thumb" src="${ph.data}" loading="lazy" alt="plant photo ${i+1}" onclick="openPhotoViewer('${encodeURIComponent(ph.data)}')">`
+    `<img class="photo-thumb" src="${ph.data}" loading="lazy" alt="plant photo ${i+1}" onclick="openPlantPhoto('${esc(plant.id)}',${i})">`
   ).join('') + `<div class="add-photo-thumb" onclick="addPlantPhoto('${esc(plant.id)}')">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
   </div>`;
@@ -758,15 +758,93 @@ function compressImage(file, maxDim, quality, callback) {
 // ============================================================
 // PHOTO VIEWER
 // ============================================================
-function openPhotoViewer(encodedSrc) {
-  const src = decodeURIComponent(encodedSrc);
-  document.getElementById('photoViewerImg').src = src;
+let _photoCtx = { photos: [], index: 0, plantStartDate: null };
+
+function openPlantPhoto(plantId, index) {
+  const plant = DB.getPlants().find(p => p.id === plantId);
+  if (!plant) return;
+  _photoCtx = {
+    photos: (plant.photos || []).map(ph => ({ src: ph.data, date: ph.date || null })),
+    index,
+    plantStartDate: plant.startDate || null
+  };
+  _showPhotoViewer();
+}
+
+function openLogPhoto(encodedSrc, photoDate, plantStartDate) {
+  _photoCtx = {
+    photos: [{ src: decodeURIComponent(encodedSrc), date: photoDate || null }],
+    index: 0,
+    plantStartDate: plantStartDate || null
+  };
+  _showPhotoViewer();
+}
+
+function _showPhotoViewer() {
+  _renderPhotoFrame();
   document.getElementById('photoViewer').classList.add('open');
+}
+
+function _renderPhotoFrame() {
+  const { photos, index, plantStartDate } = _photoCtx;
+  const photo = photos[index];
+  if (!photo) return;
+
+  document.getElementById('photoViewerImg').src = photo.src;
+
+  // Age / date info
+  const ageEl = document.getElementById('photoViewerAge');
+  const age = _plantAgeText(photo.date, plantStartDate);
+  ageEl.textContent = age;
+  ageEl.style.display = age ? '' : 'none';
+
+  // Counter
+  const counterEl = document.getElementById('photoViewerCounter');
+  if (photos.length > 1) {
+    counterEl.textContent = `${index + 1} / ${photos.length}`;
+    counterEl.style.display = '';
+  } else {
+    counterEl.textContent = '';
+    counterEl.style.display = 'none';
+  }
+
+  // Arrows
+  const multi = photos.length > 1;
+  document.getElementById('photoViewerPrev').classList.toggle('visible', multi);
+  document.getElementById('photoViewerNext').classList.toggle('visible', multi);
+
+  // Info bar visibility
+  document.getElementById('photoViewerInfo').style.display = (age || photos.length > 1) ? '' : 'none';
+}
+
+function photoViewerNav(dir) {
+  const len = _photoCtx.photos.length;
+  _photoCtx.index = (_photoCtx.index + dir + len) % len;
+  _renderPhotoFrame();
 }
 
 function closePhotoViewer() {
   document.getElementById('photoViewer').classList.remove('open');
   document.getElementById('photoViewerImg').src = '';
+}
+
+function _plantAgeText(photoDate, plantStartDate) {
+  if (photoDate && plantStartDate) {
+    const start = new Date(plantStartDate + 'T00:00:00');
+    const taken = new Date(photoDate + 'T00:00:00');
+    const days = Math.floor((taken - start) / 86400000);
+    let age;
+    if (days < 0)        age = null;
+    else if (days === 0) age = 'Day 1';
+    else if (days < 7)   age = `${days}d old`;
+    else if (days < 30)  { const w = Math.floor(days/7), d = days%7; age = d ? `${w}w ${d}d old` : `${w} week${w!==1?'s':''} old`; }
+    else if (days < 365) { const m = Math.floor(days/30), w = Math.floor((days%30)/7); age = w ? `${m}mo ${w}w old` : `${m} month${m!==1?'s':''} old`; }
+    else                 { const y = Math.floor(days/365), m = Math.floor((days%365)/30); age = m ? `${y}y ${m}mo old` : `${y} year${y!==1?'s':''} old`; }
+    if (age) return `${age} · ${formatDate(photoDate)}`;
+  }
+  if (photoDate && !plantStartDate) return formatDate(photoDate);
+  if (!photoDate && plantStartDate) return 'Photo date unknown';
+  return '';
 }
 
 // ============================================================
