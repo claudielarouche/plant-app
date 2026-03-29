@@ -389,7 +389,15 @@
   <div class="photo-viewer-frame">
     <img id="photoViewerImg" src="" alt="">
     <div class="photo-viewer-info" id="photoViewerInfo">
-      <div id="photoViewerAge"></div>
+      <div class="photo-viewer-info-row">
+        <div id="photoViewerAge"></div>
+        <button class="photo-date-edit-btn" id="photoDateEditBtn" onclick="startEditPhotoDate()" aria-label="Edit date">✏️</button>
+      </div>
+      <div class="photo-date-edit-row" id="photoDateEditRow" style="display:none">
+        <input type="date" id="photoDateInput">
+        <button class="btn btn-primary btn-sm" onclick="savePhotoDate()">Save</button>
+        <button class="btn btn-secondary btn-sm" onclick="cancelEditPhotoDate()">Cancel</button>
+      </div>
       <div id="photoViewerCounter"></div>
     </div>
   </div>

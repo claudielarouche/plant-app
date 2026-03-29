@@ -883,7 +883,7 @@ function compressImage(file, maxDim, quality, callback) {
 // ============================================================
 // PHOTO VIEWER
 // ============================================================
-let _photoCtx = { photos: [], index: 0, plantStartDate: null };
+let _photoCtx = { photos: [], index: 0, plantStartDate: null, plantId: null };
 
 function openPlantPhoto(plantId, index) {
   const plant = DB.getPlants().find(p => p.id === plantId);
@@ -891,7 +891,8 @@ function openPlantPhoto(plantId, index) {
   _photoCtx = {
     photos: (plant.photos || []).map(ph => ({ src: ph.data, date: ph.date || null })),
     index,
-    plantStartDate: plant.startDate || null
+    plantStartDate: plant.startDate || null,
+    plantId
   };
   _showPhotoViewer();
 }
@@ -900,7 +901,8 @@ function openLogPhoto(encodedSrc, photoDate, plantStartDate) {
   _photoCtx = {
     photos: [{ src: decodeURIComponent(encodedSrc), date: photoDate || null }],
     index: 0,
-    plantStartDate: plantStartDate || null
+    plantStartDate: plantStartDate || null,
+    plantId: null   // log photos are not directly editable here
   };
   _showPhotoViewer();
 }
@@ -938,8 +940,46 @@ function _renderPhotoFrame() {
   document.getElementById('photoViewerPrev').classList.toggle('visible', multi);
   document.getElementById('photoViewerNext').classList.toggle('visible', multi);
 
+  // Edit date button — only for plant photos
+  const editBtn = document.getElementById('photoDateEditBtn');
+  editBtn.style.display = _photoCtx.plantId ? '' : 'none';
+  cancelEditPhotoDate(); // reset any open editor on nav
+
   // Info bar visibility
-  document.getElementById('photoViewerInfo').style.display = (age || photos.length > 1) ? '' : 'none';
+  document.getElementById('photoViewerInfo').style.display = (_photoCtx.plantId || age || photos.length > 1) ? '' : 'none';
+}
+
+function startEditPhotoDate() {
+  const photo = _photoCtx.photos[_photoCtx.index];
+  document.getElementById('photoDateInput').value = photo.date || '';
+  document.getElementById('photoDateEditRow').style.display = 'flex';
+  document.getElementById('photoDateEditBtn').style.display = 'none';
+  document.getElementById('photoDateInput').focus();
+}
+
+function cancelEditPhotoDate() {
+  document.getElementById('photoDateEditRow').style.display = 'none';
+  if (_photoCtx.plantId) document.getElementById('photoDateEditBtn').style.display = '';
+}
+
+function savePhotoDate() {
+  const newDate = document.getElementById('photoDateInput').value;
+  const { plantId, index } = _photoCtx;
+  if (!plantId) return;
+
+  const plants = DB.getPlants();
+  const plant = plants.find(p => p.id === plantId);
+  if (!plant || !plant.photos || !plant.photos[index]) return;
+
+  plant.photos[index].date = newDate || null;
+  DB.savePlants(plants);
+
+  // Update in-memory ctx and re-render frame
+  _photoCtx.photos[index].date = newDate || null;
+  cancelEditPhotoDate();
+  _renderPhotoFrame();
+  schedulePush();
+  showToast('Date saved ✓');
 }
 
 function photoViewerNav(dir) {
