@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(New-Item -ItemType Directory -Force -Path \"C:/Users/claud/Downloads/Cowork/plant-app/netlify/functions\")"
+      "Bash(New-Item -ItemType Directory -Force -Path \"C:/Users/claud/Downloads/Cowork/plant-app/netlify/functions\")",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

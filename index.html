@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#2d5016">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Garden Journal v1.1</title>
+<title>Garden Journal v1.2</title>
 <style>
 :root {
   --g1:#1e3a0f;--g2:#2d5016;--g3:#4a7c2f;--g4:#7ab648;--g5:#a8d878;--g6:#c8eaa8;--g7:#e8f5e0;
@@ -248,7 +248,7 @@ a{color:var(--g3);text-decoration:none}
   <button class="header-back" id="backBtn" style="display:none" aria-label="Back">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
   </button>
-  <div class="header-title" id="headerTitle">🌿 Garden Journal</div>
+  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.2</span></div>
   <div class="header-actions" id="headerActions">
     <button class="header-btn" id="searchNavBtn" title="Search" aria-label="Search">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -352,7 +352,7 @@ a{color:var(--g3);text-decoration:none}
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-row-icon" style="background:var(--g7)">🌿</div>
-        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.1 · Pure HTML/JS/CSS</div></div>
+        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.2 · Pure HTML/JS/CSS</div></div>
       </div>
     </div>
   </div>
@@ -756,8 +756,8 @@ function navigate(view) {
   document.getElementById('backBtn').style.display = 'none';
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
-  document.getElementById('headerTitle').textContent = {
-    dashboard: '🌿 Garden Journal',
+  document.getElementById('headerTitle').innerHTML = {
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.2</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -1495,54 +1495,62 @@ async function saveSyncSetup() {
 
   setStatus(true, 'Connecting…');
 
-  // Test connectivity first with a quick HEAD-style GET
-  let serverReachable = false;
+  // Try to GET existing data for this ID
+  let getRes;
   try {
-    const test = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(6000) });
-    serverReachable = test.ok || test.status === 404; // 404 = new ID, that's fine
-    if (test.ok) {
-      const data = await test.json();
-      if (data && Array.isArray(data.plants) && data.plants.length > 0) {
-        DB.importAll(data);
-        setSyncDot('ok');
-        s.lastSync = new Date().toISOString();
-        DB.saveSettings(s);
-        setStatus(true, '✓ Synced! Pulled existing data from server.');
-        updateSyncDesc();
-        renderDashboard();
-        setTimeout(() => closeModal('modalSync'), 1800);
-        return;
-      }
-    }
+    getRes = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8000) });
   } catch (e) {
-    // network error or timeout
+    setSyncDot('error');
+    setStatus(false, '✗ Could not reach sync server. Make sure the app is deployed to Netlify — sync does not work when opening the file locally. (' + e.message + ')');
+    return;
   }
 
-  if (!serverReachable) {
+  if (!getRes.ok) {
     setSyncDot('error');
-    setStatus(false, '✗ Could not reach sync server. Make sure the app is deployed to Netlify — sync does not work when running locally.');
+    setStatus(false, `✗ Sync server returned an error (HTTP ${getRes.status}). Check that the Netlify function deployed successfully in your Netlify dashboard under Functions.`);
+    return;
+  }
+
+  const data = await getRes.json();
+  if (data && Array.isArray(data.plants) && data.plants.length > 0) {
+    DB.importAll(data);
+    setSyncDot('ok');
+    s.lastSync = new Date().toISOString();
+    DB.saveSettings(s);
+    setStatus(true, '✓ Synced! Pulled existing data from server.');
+    updateSyncDesc();
+    renderDashboard();
+    setTimeout(() => closeModal('modalSync'), 1800);
     return;
   }
 
   // New ID — push current data up
+  let postRes;
   try {
-    const res = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, {
+    postRes = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(DB.exportAll()),
       signal: AbortSignal.timeout(10000)
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    setSyncDot('ok');
-    s.lastSync = new Date().toISOString();
-    DB.saveSettings(s);
-    setStatus(true, '✓ Connected! Data uploaded. Use this ID on other devices to sync.');
-    updateSyncDesc();
-    setTimeout(() => closeModal('modalSync'), 2000);
   } catch (e) {
     setSyncDot('error');
     setStatus(false, '✗ Upload failed: ' + e.message);
+    return;
   }
+
+  if (!postRes.ok) {
+    setSyncDot('error');
+    setStatus(false, `✗ Upload failed (HTTP ${postRes.status}). Check the Netlify Functions log for details.`);
+    return;
+  }
+
+  setSyncDot('ok');
+  s.lastSync = new Date().toISOString();
+  DB.saveSettings(s);
+  setStatus(true, '✓ Connected! Data uploaded. Use this ID on other devices to sync.');
+  updateSyncDesc();
+  setTimeout(() => closeModal('modalSync'), 2000);
 }
 
 function setSyncDot(state) {
