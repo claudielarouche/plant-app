@@ -1529,7 +1529,7 @@ async function init() {
   renderDashboard();
   renderKnowledge();
 
-  if (settings.gardenId) {
+  if (DB.getSettings().gardenId) {
     Sync.syncIfNeeded();
   }
 
