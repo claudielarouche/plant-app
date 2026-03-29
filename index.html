@@ -1473,6 +1473,10 @@ function generateGardenId() {
 async function saveSyncSetup() {
   const id = document.getElementById('gardenIdInput').value.trim();
   if (!id) { showToast('Enter a Garden ID'); return; }
+  if (!/^[a-z0-9\-]{8,64}$/.test(id)) {
+    showToast('ID must be 8–64 chars: lowercase letters, numbers, hyphens');
+    return;
+  }
 
   const s = DB.getSettings();
   s.gardenId = id;
@@ -1480,22 +1484,65 @@ async function saveSyncSetup() {
 
   const statusEl = document.getElementById('syncStatus');
   statusEl.style.display = 'block';
-  statusEl.style.background = 'var(--g7)';
-  statusEl.style.color = 'var(--g2)';
-  statusEl.textContent = 'Connecting…';
+  statusEl.style.borderRadius = 'var(--rs)';
+  statusEl.style.padding = '10px 12px';
 
-  const pulled = await Sync.pull();
-  if (pulled) {
-    statusEl.textContent = '✓ Connected and data synced from server!';
-    renderDashboard();
-  } else {
-    // Push current data
-    await Sync.push();
-    statusEl.textContent = '✓ Connected! Your data has been uploaded.';
+  function setStatus(ok, msg) {
+    statusEl.style.background = ok ? 'var(--g7)' : '#fdecea';
+    statusEl.style.color = ok ? 'var(--g2)' : 'var(--red)';
+    statusEl.textContent = msg;
   }
 
-  updateSyncDesc();
-  setTimeout(() => closeModal('modalSync'), 1500);
+  setStatus(true, 'Connecting…');
+
+  // Test connectivity first with a quick HEAD-style GET
+  let serverReachable = false;
+  try {
+    const test = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(6000) });
+    serverReachable = test.ok || test.status === 404; // 404 = new ID, that's fine
+    if (test.ok) {
+      const data = await test.json();
+      if (data && Array.isArray(data.plants) && data.plants.length > 0) {
+        DB.importAll(data);
+        setSyncDot('ok');
+        s.lastSync = new Date().toISOString();
+        DB.saveSettings(s);
+        setStatus(true, '✓ Synced! Pulled existing data from server.');
+        updateSyncDesc();
+        renderDashboard();
+        setTimeout(() => closeModal('modalSync'), 1800);
+        return;
+      }
+    }
+  } catch (e) {
+    // network error or timeout
+  }
+
+  if (!serverReachable) {
+    setSyncDot('error');
+    setStatus(false, '✗ Could not reach sync server. Make sure the app is deployed to Netlify — sync does not work when running locally.');
+    return;
+  }
+
+  // New ID — push current data up
+  try {
+    const res = await fetch(`${Sync.endpoint}?id=${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(DB.exportAll()),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setSyncDot('ok');
+    s.lastSync = new Date().toISOString();
+    DB.saveSettings(s);
+    setStatus(true, '✓ Connected! Data uploaded. Use this ID on other devices to sync.');
+    updateSyncDesc();
+    setTimeout(() => closeModal('modalSync'), 2000);
+  } catch (e) {
+    setSyncDot('error');
+    setStatus(false, '✗ Upload failed: ' + e.message);
+  }
 }
 
 function setSyncDot(state) {
