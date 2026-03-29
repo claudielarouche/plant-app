@@ -1043,9 +1043,9 @@ async function init() {
 
   if (!DB.getPlants().length) {
     const demoPlants = [
-      { id: uuid(), name: 'Tomato — Kitchen window', type: 'Tomato', startDate: '2025-03-01', location: 'Kitchen, south-facing', emoji: '🍅', notes: 'Indeterminate variety, needs staking', active: true, photos: [], createdAt: new Date().toISOString() },
+      { id: uuid(), name: 'Tomato — Kitchen window', type: 'Fruit', startDate: '2025-03-01', location: 'Kitchen, south-facing', emoji: '🍅', notes: 'Indeterminate variety, needs staking', active: true, photos: [], createdAt: new Date().toISOString() },
       { id: uuid(), name: 'Basil', type: 'Herb', startDate: '2025-02-15', location: 'Bedroom windowsill', emoji: '🌿', notes: 'Pinch flowers to keep bushy', active: true, photos: [], createdAt: new Date().toISOString() },
-      { id: uuid(), name: 'Pothos', type: 'Pothos', startDate: '2024-11-01', location: 'Living room, indirect light', emoji: '🪴', notes: 'Very forgiving, propagates easily', active: true, photos: [], createdAt: new Date().toISOString() },
+      { id: uuid(), name: 'Pothos', type: 'Other', startDate: '2024-11-01', location: 'Living room, indirect light', emoji: '🪴', notes: 'Very forgiving, propagates easily', active: true, photos: [], createdAt: new Date().toISOString() },
     ];
     demoPlants.forEach(p => DB.addPlant(p));
 
