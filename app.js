@@ -89,6 +89,15 @@ const Sync = {
 
   getGardenId() { return DB.getSettings().gardenId || null; },
 
+  async fetchRemote() {
+    const id = this.getGardenId();
+    if (!id) return null;
+    const res = await fetch(`${this.endpoint}?id=${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return (data && data.plants) ? data : null;
+  },
+
   async push() {
     const id = this.getGardenId();
     if (!id) return;
@@ -97,7 +106,8 @@ const Sync = {
       const res = await fetch(`${this.endpoint}?id=${encodeURIComponent(id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(DB.exportAll())
+        body: JSON.stringify(DB.exportAll()),
+        signal: AbortSignal.timeout(10000)
       });
       if (!res.ok) throw new Error('Push failed');
       setSyncDot('ok');
@@ -109,33 +119,39 @@ const Sync = {
     }
   },
 
-  async pull() {
+  async smartSync() {
     const id = this.getGardenId();
-    if (!id) return false;
+    if (!id) return 'no-id';
     setSyncDot('syncing');
     try {
-      const res = await fetch(`${this.endpoint}?id=${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error('Pull failed');
-      const data = await res.json();
-      if (data && data.plants) {
-        DB.importAll(data);
+      const remote = await this.fetchRemote();
+      const localModified = DB.getSettings().lastModified || '0';
+      const remoteModified = remote?.settings?.lastModified || '0';
+
+      if (!remote || localModified >= remoteModified) {
+        // Local is newer (or server is empty) — push
+        await this.push();
+        return 'pushed';
+      } else {
+        // Remote is newer — pull
+        DB.importAll(remote);
         setSyncDot('ok');
-        return true;
+        const s = DB.getSettings(); s.lastSync = new Date().toISOString(); DB.saveSettings(s);
+        updateSyncDesc();
+        return 'pulled';
       }
-      setSyncDot('ok');
-      return false;
     } catch (e) {
       setSyncDot('error');
-      console.warn('Sync pull failed:', e);
-      return false;
+      console.warn('Smart sync failed:', e);
+      return 'error';
     }
   },
 
   async syncIfNeeded() {
     const id = this.getGardenId();
     if (!id) return;
-    const pulled = await this.pull();
-    if (pulled) renderDashboard();
+    const result = await this.smartSync();
+    if (result === 'pulled') { renderDashboard(); renderKnowledge(); }
   }
 };
 
@@ -1202,68 +1218,47 @@ function updateSyncDesc() {
   const syncNowRow = document.getElementById('syncNowRow');
   const headerSyncBtn = document.getElementById('headerSyncBtn');
   if (!desc) return;
-  const syncPullRow = document.getElementById('syncPullRow');
-  const syncPushRow = document.getElementById('syncPushRow');
+  const syncNowRow = document.getElementById('syncNowRow');
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
-    if (syncPullRow) syncPullRow.style.display = '';
-    if (syncPushRow) syncPushRow.style.display = '';
+    if (syncNowRow) syncNowRow.style.display = '';
     if (headerSyncBtn) headerSyncBtn.style.display = '';
   } else {
     desc.textContent = 'Share your garden across devices';
-    if (syncPullRow) syncPullRow.style.display = 'none';
-    if (syncPushRow) syncPushRow.style.display = 'none';
+    if (syncNowRow) syncNowRow.style.display = 'none';
     if (headerSyncBtn) headerSyncBtn.style.display = 'none';
   }
 }
 
-async function headerSync() {
-  const btn = document.getElementById('headerSyncBtn');
+async function runSync(btnId, descId, btnLabel) {
+  const btn = document.getElementById(btnId);
+  const desc = document.getElementById(descId);
   const icon = document.getElementById('headerSyncIcon');
-  if (btn) btn.disabled = true;
+  if (btn) { btn.disabled = true; if (btnLabel) btn.textContent = '…'; }
   if (icon) icon.style.animation = 'spin 1s linear infinite';
+  if (desc) desc.textContent = 'Checking…';
   try {
-    const pulled = await Sync.pull();
-    if (pulled) { renderDashboard(); renderKnowledge(); }
-    showToast('Pulled latest ✓');
-  } catch (e) {
-    showToast('Sync failed');
+    const result = await Sync.smartSync();
+    if (result === 'pulled') { renderDashboard(); renderKnowledge(); showToast('Updated from cloud ✓'); if (desc) desc.textContent = 'Updated from cloud ✓'; }
+    else if (result === 'pushed') { showToast('Uploaded to cloud ✓'); if (desc) desc.textContent = 'Uploaded to cloud ✓'; }
+    else if (result === 'error') { showToast('Sync failed'); if (desc) desc.textContent = 'Sync failed — check connection'; }
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; if (btnLabel) btn.textContent = btnLabel; }
     if (icon) icon.style.animation = '';
     updateSyncDesc();
   }
 }
 
-async function forcSync(direction) {
-  const isPush = direction === 'push';
-  const btn = document.getElementById(isPush ? 'syncPushBtn' : 'syncPullBtn');
-  const desc = document.getElementById(isPush ? 'syncPushDesc' : 'syncPullDesc');
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  if (desc) desc.textContent = isPush ? 'Uploading…' : 'Downloading…';
-  try {
-    if (isPush) {
-      await Sync.push();
-      if (desc) desc.textContent = 'Uploaded ✓';
-      showToast('Pushed to server ✓');
-    } else {
-      const pulled = await Sync.pull();
-      if (pulled) { renderDashboard(); renderKnowledge(); }
-      if (desc) desc.textContent = 'Downloaded ✓';
-      showToast('Pulled latest ✓');
-    }
-  } catch (e) {
-    if (desc) desc.textContent = 'Failed — check connection';
-    showToast('Sync failed');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = isPush ? 'Push' : 'Pull'; }
-    updateSyncDesc();
-  }
-}
+function headerSync() { runSync('headerSyncBtn', null, null); }
+function forcSync()   { runSync('syncNowBtn', 'syncNowDesc', 'Sync'); }
 
 let pushTimer = null;
 function schedulePush() {
+  // Stamp lastModified so smartSync knows local is newer than server
+  const s = DB.getSettings();
+  s.lastModified = new Date().toISOString();
+  DB.saveSettings(s);
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => Sync.push(), 2000);
 }
