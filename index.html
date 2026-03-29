@@ -6,7 +6,8 @@
 <meta name="theme-color" content="#2d5016">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Garden Journal v1.2</title>
+<title>Garden Journal v1.3</title>
+
 <style>
 :root {
   --g1:#1e3a0f;--g2:#2d5016;--g3:#4a7c2f;--g4:#7ab648;--g5:#a8d878;--g6:#c8eaa8;--g7:#e8f5e0;
@@ -248,7 +249,7 @@ a{color:var(--g3);text-decoration:none}
   <button class="header-back" id="backBtn" style="display:none" aria-label="Back">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
   </button>
-  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.2</span></div>
+  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.3</span></div>
   <div class="header-actions" id="headerActions">
     <button class="header-btn" id="searchNavBtn" title="Search" aria-label="Search">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -352,7 +353,7 @@ a{color:var(--g3);text-decoration:none}
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-row-icon" style="background:var(--g7)">🌿</div>
-        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.2 · Pure HTML/JS/CSS</div></div>
+        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.3 · Pure HTML/JS/CSS</div></div>
       </div>
     </div>
   </div>
@@ -673,7 +674,7 @@ const DB = {
 // SYNC (Netlify Blobs via serverless function)
 // ============================================================
 const Sync = {
-  endpoint: '/api/sync',
+  endpoint: '/.netlify/functions/sync',
 
   getGardenId() { return DB.getSettings().gardenId || null; },
 
@@ -757,7 +758,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.2</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.3</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
