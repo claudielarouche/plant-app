@@ -49,10 +49,6 @@ const DB = {
   deleteLog(id) { this.saveLogs(this.getLogs().filter(x => x.id !== id)); },
 
   getPlantLogs(plantId) { return this.getLogs().filter(x => x.plantId === plantId).sort((a,b) => a.date.localeCompare(b.date)); },
-  getLastWatered(plantId) {
-    const logs = this.getLogs().filter(x => x.plantId === plantId && x.action === 'watered').sort((a,b) => b.date.localeCompare(a.date));
-    return logs.length ? logs[0].date : null;
-  },
   getLastAction(plantId) {
     const logs = this.getLogs().filter(x => x.plantId === plantId).sort((a,b) => b.date.localeCompare(a.date));
     return logs.length ? logs[0] : null;
@@ -159,7 +155,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.6</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.7</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -218,27 +214,9 @@ function renderDashboard() {
     return;
   }
 
-  const settings = DB.getSettings();
-  const defaultInterval = parseInt(settings.defaultInterval) || 7;
-
   grid.innerHTML = plants.map(plant => {
-    const lastWatered = DB.getLastWatered(plant.id);
     const lastAction = DB.getLastAction(plant.id);
-    const interval = parseInt(plant.wateringInterval) || defaultInterval;
-    const daysSinceWater = lastWatered ? daysSince(lastWatered) : null;
-    const overdue = daysSinceWater !== null ? daysSinceWater >= interval : false;
     const daysSinceAny = lastAction ? daysSince(lastAction.date) : null;
-
-    let waterBadge = '';
-    if (lastWatered === null) {
-      waterBadge = `<span class="badge badge-earth">💧 Never watered</span>`;
-    } else if (overdue) {
-      waterBadge = `<span class="badge badge-red">💧 ${daysSinceWater}d ago — overdue</span>`;
-    } else if (daysSinceWater === 0) {
-      waterBadge = `<span class="badge badge-green">💧 Watered today</span>`;
-    } else {
-      waterBadge = `<span class="badge badge-green">💧 ${daysSinceWater}d ago</span>`;
-    }
 
     let activityBadge = '';
     if (daysSinceAny !== null) {
@@ -246,7 +224,6 @@ function renderDashboard() {
     }
 
     return `<div class="plant-card" onclick="showDetail('${esc(plant.id)}')">
-      ${overdue ? '<div class="overdue-bar"></div>' : ''}
       <div class="plant-card-header">
         <div class="plant-icon">${esc(plant.emoji || '🌱')}</div>
         <div class="plant-card-info">
@@ -256,11 +233,9 @@ function renderDashboard() {
         </div>
       </div>
       <div class="plant-card-meta">
-        ${waterBadge}
         ${activityBadge}
       </div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
-        <button class="quick-btn quick-btn-water" onclick="quickLog('${esc(plant.id)}','watered')">💧 Water</button>
         <button class="quick-btn quick-btn-note" onclick="quickLog('${esc(plant.id)}','observed')">📝 Note</button>
       </div>
     </div>`;
@@ -275,11 +250,6 @@ function renderDetail(plantId) {
   if (!plant) { navigate('dashboard'); return; }
 
   const logs = DB.getPlantLogs(plantId);
-  const lastWatered = DB.getLastWatered(plantId);
-  const settings = DB.getSettings();
-  const defaultInterval = parseInt(settings.defaultInterval) || 7;
-  const interval = parseInt(plant.wateringInterval) || defaultInterval;
-  const daysSinceWater = lastWatered ? daysSince(lastWatered) : null;
 
   const groups = {};
   logs.forEach(log => {
@@ -318,11 +288,6 @@ function renderDetail(plantId) {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
   </div>`;
 
-  let waterStatus = '';
-  if (daysSinceWater === null) waterStatus = '<span class="badge badge-earth">Never watered</span>';
-  else if (daysSinceWater >= interval) waterStatus = `<span class="badge badge-red">💧 Overdue — ${daysSinceWater}d since watering</span>`;
-  else waterStatus = `<span class="badge badge-green">💧 Watered ${daysSinceWater === 0 ? 'today' : daysSinceWater + 'd ago'}</span>`;
-
   document.getElementById('detailContent').innerHTML = `
     <div class="plant-detail-header">
       <div style="display:flex;align-items:center;gap:14px">
@@ -330,13 +295,11 @@ function renderDetail(plantId) {
         <div style="flex:1;min-width:0">
           <div class="plant-detail-name">${esc(plant.name)}</div>
           ${plant.type ? `<div class="plant-type" style="font-size:13px;color:var(--text3)">${esc(plant.type)}</div>` : ''}
-          <div style="margin-top:6px">${waterStatus}</div>
         </div>
       </div>
       <div class="plant-detail-meta">
         ${plant.location ? `<div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
         ${plant.startDate ? `<div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Started ${formatDate(plant.startDate)}</div>` : ''}
-        <div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Water every ${interval} day${interval !== 1 ? 's' : ''}</div>
         ${plant.notes ? `<div class="meta-row" style="align-items:flex-start"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:2px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span style="white-space:pre-wrap">${esc(plant.notes)}</span></div>` : ''}
       </div>
       ${(plant.photos && plant.photos.length) || true ? `<div class="plant-photos">${photosHTML}</div>` : ''}
@@ -368,7 +331,7 @@ function renderDetail(plantId) {
 // ============================================================
 function renderSearch() {
   const chips = document.getElementById('filterChips');
-  const actions = ['all','watered','fertilized','pruned','repotted','treated','observed','harvested'];
+  const actions = ['all','fertilized','pruned','repotted','treated','observed','harvested'];
   chips.innerHTML = actions.map(a => `
     <button class="chip ${state.filterAction === a ? 'active' : ''}" onclick="setFilterAction('${a}')">
       ${a === 'all' ? 'All actions' : actionEmoji(a) + ' ' + capitalize(a)}
@@ -462,7 +425,6 @@ function openAddPlant() {
   document.getElementById('plantType').value = '';
   document.getElementById('plantStart').value = today();
   document.getElementById('plantLocation').value = '';
-  document.getElementById('plantInterval').value = DB.getSettings().defaultInterval || 7;
   document.getElementById('plantEmoji').value = '🌱';
   document.getElementById('plantNotes').value = '';
   document.getElementById('modalPlantTitle').textContent = 'Add Plant';
@@ -478,7 +440,6 @@ function openEditPlant(id) {
   document.getElementById('plantType').value = p.type || '';
   document.getElementById('plantStart').value = p.startDate || '';
   document.getElementById('plantLocation').value = p.location || '';
-  document.getElementById('plantInterval').value = p.wateringInterval || 7;
   document.getElementById('plantEmoji').value = p.emoji || '🌱';
   document.getElementById('plantNotes').value = p.notes || '';
   document.getElementById('modalPlantTitle').textContent = 'Edit Plant';
@@ -499,7 +460,6 @@ function savePlant() {
     type: document.getElementById('plantType').value,
     startDate: document.getElementById('plantStart').value,
     location: document.getElementById('plantLocation').value.trim(),
-    wateringInterval: parseInt(document.getElementById('plantInterval').value) || 7,
     emoji: document.getElementById('plantEmoji').value,
     notes: document.getElementById('plantNotes').value.trim(),
     active: true,
@@ -577,7 +537,7 @@ function openAddLog(plantId) {
   }
 
   document.querySelectorAll('#actionGrid .action-option').forEach(el => el.classList.remove('selected'));
-  document.querySelector('#actionGrid .action-option[data-action="watered"]').classList.add('selected');
+  document.querySelector('#actionGrid .action-option[data-action="observed"]').classList.add('selected');
 
   document.getElementById('modalLogTitle').textContent = 'Log Entry';
   openModal('modalLog');
@@ -617,6 +577,7 @@ function saveLog() {
   const selectedAction = document.querySelector('#actionGrid .action-option.selected');
   const action = selectedAction ? selectedAction.dataset.action : 'observed';
   const date = document.getElementById('logDate').value || today();
+
   const notes = document.getElementById('logNotes').value.trim();
   const photo = document.getElementById('logPhotoPreview').style.display !== 'none'
     ? document.getElementById('logPhotoPreview').src
@@ -687,7 +648,7 @@ function saveQuickLog() {
   const plantId = document.getElementById('quickPlantId').value;
   if (!plantId) return;
   const selectedAction = document.querySelector('#quickActionGrid .action-option.selected');
-  const action = selectedAction ? selectedAction.dataset.action : 'watered';
+  const action = selectedAction ? selectedAction.dataset.action : 'observed';
   const notes = document.getElementById('quickNotes').value.trim();
 
   DB.addLog({
@@ -914,13 +875,6 @@ function importJSON(input) {
 // ============================================================
 // SETTINGS
 // ============================================================
-function saveDefaultInterval(val) {
-  const s = DB.getSettings();
-  s.defaultInterval = parseInt(val) || 7;
-  DB.saveSettings(s);
-  showToast('Default interval saved');
-}
-
 function confirmClearAll() {
   if (confirm('Delete ALL plants and log entries? This cannot be undone.')) {
     localStorage.removeItem(DB.KEY_PLANTS);
@@ -1089,7 +1043,7 @@ function showToast(msg) {
 // ACTION HELPERS
 // ============================================================
 const ACTION_EMOJIS = {
-  watered: '💧', fertilized: '🌿', pruned: '✂️', repotted: '🪴',
+  fertilized: '🌿', pruned: '✂️', repotted: '🪴',
   treated: '💊', observed: '👀', harvested: '🌾', other: '📝'
 };
 function actionEmoji(action) { return ACTION_EMOJIS[action] || '📝'; }
@@ -1098,9 +1052,6 @@ function actionEmoji(action) { return ACTION_EMOJIS[action] || '📝'; }
 // INIT
 // ============================================================
 async function init() {
-  const settings = DB.getSettings();
-  const intervalInput = document.getElementById('defaultIntervalInput');
-  if (intervalInput) intervalInput.value = settings.defaultInterval || 7;
   updateSyncDesc();
 
   renderDashboard();
@@ -1111,21 +1062,19 @@ async function init() {
 
   if (!DB.getPlants().length) {
     const demoPlants = [
-      { id: uuid(), name: 'Tomato — Kitchen window', type: 'Tomato', startDate: '2025-03-01', location: 'Kitchen, south-facing', wateringInterval: 3, emoji: '🍅', notes: 'Indeterminate variety, needs staking', active: true, photos: [], createdAt: new Date().toISOString() },
-      { id: uuid(), name: 'Basil', type: 'Herb', startDate: '2025-02-15', location: 'Bedroom windowsill', wateringInterval: 5, emoji: '🌿', notes: 'Pinch flowers to keep bushy', active: true, photos: [], createdAt: new Date().toISOString() },
-      { id: uuid(), name: 'Pothos', type: 'Pothos', startDate: '2024-11-01', location: 'Living room, indirect light', wateringInterval: 10, emoji: '🪴', notes: 'Very forgiving, propagates easily', active: true, photos: [], createdAt: new Date().toISOString() },
+      { id: uuid(), name: 'Tomato — Kitchen window', type: 'Tomato', startDate: '2025-03-01', location: 'Kitchen, south-facing', emoji: '🍅', notes: 'Indeterminate variety, needs staking', active: true, photos: [], createdAt: new Date().toISOString() },
+      { id: uuid(), name: 'Basil', type: 'Herb', startDate: '2025-02-15', location: 'Bedroom windowsill', emoji: '🌿', notes: 'Pinch flowers to keep bushy', active: true, photos: [], createdAt: new Date().toISOString() },
+      { id: uuid(), name: 'Pothos', type: 'Pothos', startDate: '2024-11-01', location: 'Living room, indirect light', emoji: '🪴', notes: 'Very forgiving, propagates easily', active: true, photos: [], createdAt: new Date().toISOString() },
     ];
     demoPlants.forEach(p => DB.addPlant(p));
 
     const now = new Date();
     const d = (n) => new Date(now - n * 86400000).toISOString().slice(0, 10);
     const demoLogs = [
-      { id: uuid(), plantId: demoPlants[0].id, action: 'watered', date: d(2), notes: 'Soil was very dry', photo: null, createdAt: new Date().toISOString() },
       { id: uuid(), plantId: demoPlants[0].id, action: 'fertilized', date: d(7), notes: 'Added liquid tomato feed', photo: null, createdAt: new Date().toISOString() },
       { id: uuid(), plantId: demoPlants[0].id, action: 'observed', date: d(1), notes: 'First flowers appearing!', photo: null, createdAt: new Date().toISOString() },
-      { id: uuid(), plantId: demoPlants[1].id, action: 'watered', date: d(4), notes: '', photo: null, createdAt: new Date().toISOString() },
       { id: uuid(), plantId: demoPlants[1].id, action: 'pruned', date: d(10), notes: 'Pinched back tops', photo: null, createdAt: new Date().toISOString() },
-      { id: uuid(), plantId: demoPlants[2].id, action: 'watered', date: d(9), notes: '', photo: null, createdAt: new Date().toISOString() },
+      { id: uuid(), plantId: demoPlants[1].id, action: 'observed', date: d(4), notes: '', photo: null, createdAt: new Date().toISOString() },
       { id: uuid(), plantId: demoPlants[2].id, action: 'observed', date: d(3), notes: 'New leaf unfurling on main stem', photo: null, createdAt: new Date().toISOString() },
     ];
     demoLogs.forEach(l => DB.addLog(l));

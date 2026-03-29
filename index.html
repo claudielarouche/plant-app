@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#2d5016">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Garden Journal v1.6</title>
+<title>Garden Journal v1.7</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
   <button class="header-back" id="backBtn" style="display:none" aria-label="Back">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
   </button>
-  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.6</span></div>
+  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.7</span></div>
   <div class="header-actions" id="headerActions">
     <button class="header-btn" id="searchNavBtn" title="Search" aria-label="Search">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -97,16 +97,6 @@
     </div>
   </div>
   <div class="settings-section">
-    <div class="settings-title">Defaults</div>
-    <div class="settings-card">
-      <div class="settings-row">
-        <div class="settings-row-icon" style="background:var(--e6)">💧</div>
-        <div class="settings-row-text"><div class="settings-row-label">Default water interval</div><div class="settings-row-desc">Days until overdue indicator shows</div></div>
-        <input type="number" id="defaultIntervalInput" min="1" max="30" value="7" style="width:56px;text-align:center;flex-shrink:0" onchange="saveDefaultInterval(this.value)">
-      </div>
-    </div>
-  </div>
-  <div class="settings-section">
     <div class="settings-title">Data</div>
     <div class="settings-card">
       <div class="settings-row">
@@ -121,7 +111,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-row-icon" style="background:var(--g7)">🌿</div>
-        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.6 · Pure HTML/JS/CSS</div></div>
+        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.7 · Pure HTML/JS/CSS</div></div>
       </div>
     </div>
   </div>
@@ -204,31 +194,25 @@
         <label class="form-label" for="plantLocation">Location <span>(room / window)</span></label>
         <input type="text" id="plantLocation" placeholder="e.g. Kitchen windowsill, south-facing" autocomplete="off">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="plantInterval">Water interval <span>(days)</span></label>
-          <input type="number" id="plantInterval" min="1" max="60" placeholder="7">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="plantEmoji">Icon</label>
-          <select id="plantEmoji">
-            <option value="🌱">🌱 Seedling</option>
-            <option value="🌿">🌿 Herb</option>
-            <option value="🍅">🍅 Tomato</option>
-            <option value="🌶️">🌶️ Pepper</option>
-            <option value="🥬">🥬 Greens</option>
-            <option value="🧅">🧅 Onion</option>
-            <option value="🌸">🌸 Flower</option>
-            <option value="🌻">🌻 Sunflower</option>
-            <option value="🌵">🌵 Cactus</option>
-            <option value="🪴">🪴 Potted</option>
-            <option value="🌴">🌴 Palm</option>
-            <option value="🍃">🍃 Leaves</option>
-            <option value="🫚">🫚 Ginger</option>
-            <option value="🍋">🍋 Citrus</option>
-            <option value="🍓">🍓 Berry</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label class="form-label" for="plantEmoji">Icon</label>
+        <select id="plantEmoji">
+          <option value="🌱">🌱 Seedling</option>
+          <option value="🌿">🌿 Herb</option>
+          <option value="🍅">🍅 Tomato</option>
+          <option value="🌶️">🌶️ Pepper</option>
+          <option value="🥬">🥬 Greens</option>
+          <option value="🧅">🧅 Onion</option>
+          <option value="🌸">🌸 Flower</option>
+          <option value="🌻">🌻 Sunflower</option>
+          <option value="🌵">🌵 Cactus</option>
+          <option value="🪴">🪴 Potted</option>
+          <option value="🌴">🌴 Palm</option>
+          <option value="🍃">🍃 Leaves</option>
+          <option value="🫚">🫚 Ginger</option>
+          <option value="🍋">🍋 Citrus</option>
+          <option value="🍓">🍓 Berry</option>
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label" for="plantNotes">Notes</label>
@@ -260,12 +244,11 @@
       <div class="form-group">
         <label class="form-label">Action</label>
         <div class="action-grid" id="actionGrid">
-          <div class="action-option selected" data-action="watered" onclick="selectAction(this)"><span class="action-emoji">💧</span>Watered</div>
           <div class="action-option" data-action="fertilized" onclick="selectAction(this)"><span class="action-emoji">🌿</span>Fertilized</div>
           <div class="action-option" data-action="pruned" onclick="selectAction(this)"><span class="action-emoji">✂️</span>Pruned</div>
           <div class="action-option" data-action="repotted" onclick="selectAction(this)"><span class="action-emoji">🪴</span>Repotted</div>
           <div class="action-option" data-action="treated" onclick="selectAction(this)"><span class="action-emoji">💊</span>Treated</div>
-          <div class="action-option" data-action="observed" onclick="selectAction(this)"><span class="action-emoji">👀</span>Observed</div>
+          <div class="action-option selected" data-action="observed" onclick="selectAction(this)"><span class="action-emoji">👀</span>Observed</div>
           <div class="action-option" data-action="harvested" onclick="selectAction(this)"><span class="action-emoji">🌾</span>Harvested</div>
           <div class="action-option" data-action="other" onclick="selectAction(this)"><span class="action-emoji">📝</span>Other</div>
         </div>
@@ -306,10 +289,9 @@
     <div class="modal-body">
       <input type="hidden" id="quickPlantId">
       <div class="action-grid" id="quickActionGrid">
-        <div class="action-option selected" data-action="watered" onclick="selectQuickAction(this)"><span class="action-emoji">💧</span>Watered</div>
         <div class="action-option" data-action="fertilized" onclick="selectQuickAction(this)"><span class="action-emoji">🌿</span>Fertilized</div>
         <div class="action-option" data-action="pruned" onclick="selectQuickAction(this)"><span class="action-emoji">✂️</span>Pruned</div>
-        <div class="action-option" data-action="observed" onclick="selectQuickAction(this)"><span class="action-emoji">👀</span>Observed</div>
+        <div class="action-option selected" data-action="observed" onclick="selectQuickAction(this)"><span class="action-emoji">👀</span>Observed</div>
       </div>
       <div class="form-group mt-12">
         <label class="form-label" for="quickNotes">Note <span>(optional)</span></label>
