@@ -156,7 +156,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.7</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.8</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -201,10 +201,24 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // RENDER: DASHBOARD
 // ============================================================
 function renderDashboard() {
-  const plants = DB.getPlants().filter(p => p.active !== false);
+  const allPlants = DB.getPlants();
+  const inactiveCount = allPlants.filter(p => p.active === false).length;
+  const plants = state.showInactive ? allPlants : allPlants.filter(p => p.active !== false);
+
   const grid = document.getElementById('plantsGrid');
   const count = document.getElementById('plantCount');
   count.textContent = plants.length ? `${plants.length} plant${plants.length !== 1 ? 's' : ''}` : '';
+
+  // Show/hide the inactive toggle
+  const toggleBtn = document.getElementById('inactiveToggle');
+  if (inactiveCount === 0) {
+    toggleBtn.style.display = 'none';
+    state.showInactive = false;
+  } else {
+    toggleBtn.style.display = '';
+    toggleBtn.textContent = state.showInactive ? 'Hide inactive' : `+${inactiveCount} inactive`;
+    toggleBtn.classList.toggle('on', state.showInactive);
+  }
 
   if (!plants.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
@@ -216,6 +230,7 @@ function renderDashboard() {
   }
 
   grid.innerHTML = plants.map(plant => {
+    const inactive = plant.active === false;
     const lastAction = DB.getLastAction(plant.id);
     const daysSinceAny = lastAction ? daysSince(lastAction.date) : null;
 
@@ -223,8 +238,9 @@ function renderDashboard() {
     if (daysSinceAny !== null) {
       activityBadge = `<span class="badge badge-earth">${actionEmoji(lastAction.action)} ${daysSinceAny === 0 ? 'Today' : daysSinceAny + 'd ago'}</span>`;
     }
+    const inactiveBadge = inactive ? `<span class="badge badge-inactive">Inactive</span>` : '';
 
-    return `<div class="plant-card" onclick="showDetail('${esc(plant.id)}')">
+    return `<div class="plant-card${inactive ? ' inactive' : ''}" onclick="showDetail('${esc(plant.id)}')">
       <div class="plant-card-header">
         <div class="plant-icon">${esc(plant.emoji || '🌱')}</div>
         <div class="plant-card-info">
@@ -234,13 +250,18 @@ function renderDashboard() {
         </div>
       </div>
       <div class="plant-card-meta">
-        ${activityBadge}
+        ${inactiveBadge}${activityBadge}
       </div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
         <button class="quick-btn quick-btn-note" onclick="openAddLog('${esc(plant.id)}')">📝 Note</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function toggleShowInactive() {
+  state.showInactive = !state.showInactive;
+  renderDashboard();
 }
 
 // ============================================================
@@ -427,6 +448,7 @@ function openAddPlant() {
   document.getElementById('plantStart').value = today();
   document.getElementById('plantLocation').value = '';
   document.getElementById('plantEmoji').value = '🌱';
+  document.getElementById('plantStatus').value = 'active';
   document.getElementById('plantNotes').value = '';
   document.getElementById('modalPlantTitle').textContent = 'Add Plant';
   openModal('modalPlant');
@@ -442,6 +464,7 @@ function openEditPlant(id) {
   document.getElementById('plantStart').value = p.startDate || '';
   document.getElementById('plantLocation').value = p.location || '';
   document.getElementById('plantEmoji').value = p.emoji || '🌱';
+  document.getElementById('plantStatus').value = p.active === false ? 'inactive' : 'active';
   document.getElementById('plantNotes').value = p.notes || '';
   document.getElementById('modalPlantTitle').textContent = 'Edit Plant';
   openModal('modalPlant');
@@ -463,7 +486,7 @@ function savePlant() {
     location: document.getElementById('plantLocation').value.trim(),
     emoji: document.getElementById('plantEmoji').value,
     notes: document.getElementById('plantNotes').value.trim(),
-    active: true,
+    active: document.getElementById('plantStatus').value !== 'inactive',
     updatedAt: new Date().toISOString()
   };
 
