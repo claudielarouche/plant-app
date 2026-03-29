@@ -1,9 +1,6 @@
 {
   "name": "garden-journal",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Single-file garden journal app with Netlify sync",
-  "dependencies": {
-    "@netlify/blobs": "^8.0.0"
-  }
+  "description": "Single-file garden journal app with Netlify sync"
 }

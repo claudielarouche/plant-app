@@ -1,15 +1,6 @@
 [build]
   publish = "."
 
-[functions]
-  node_bundler = "esbuild"
-  included_files = []
-
-[[redirects]]
-  from = "/api/sync"
-  to = "/.netlify/functions/sync"
-  status = 200
-
 [[headers]]
   for = "/*"
   [headers.values]
@@ -22,8 +13,3 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
