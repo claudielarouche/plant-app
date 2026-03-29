@@ -173,6 +173,7 @@ a{color:var(--g3);text-decoration:none}
   .modal{border-radius:var(--r);max-height:85vh}
 }
 @keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
 .modal-header{padding:16px 16px 0;display:flex;align-items:center;gap:12px;flex-shrink:0}
 .modal-title{font-size:17px;font-weight:700;flex:1}
 .modal-close{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:20px;transition:background .15s}

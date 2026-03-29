@@ -72,20 +72,11 @@ const DB = {
   exportAll() { return { plants: this.getPlants(), logs: this.getLogs(), settings: this.getSettings(), knowledge: this.getKnowledge(), exportedAt: new Date().toISOString(), version: 1 }; },
   importAll(data) {
     if (!data.plants || !data.logs) throw new Error('Invalid format');
-    const existing = this.exportAll();
-    const plantMap = Object.fromEntries(existing.plants.map(p => [p.id, p]));
-    const logMap = Object.fromEntries(existing.logs.map(l => [l.id, l]));
-    data.plants.forEach(p => plantMap[p.id] = p);
-    data.logs.forEach(l => logMap[l.id] = l);
-    this.savePlants(Object.values(plantMap));
-    this.saveLogs(Object.values(logMap));
-    // Merge knowledge: incoming edits win (last-write by updatedAt)
+    // Full replace — server is the authoritative snapshot so deletions propagate correctly
+    this.savePlants(data.plants);
+    this.saveLogs(data.logs);
     if (data.knowledge && Array.isArray(data.knowledge)) {
-      const kMap = Object.fromEntries(existing.knowledge.map(c => [c.id, c]));
-      data.knowledge.forEach(c => {
-        if (!kMap[c.id] || c.updatedAt > kMap[c.id].updatedAt) kMap[c.id] = c;
-      });
-      this.saveKnowledge(Object.values(kMap));
+      this.saveKnowledge(data.knowledge);
     }
   }
 };
@@ -1209,14 +1200,36 @@ function updateSyncDesc() {
   const s = DB.getSettings();
   const desc = document.getElementById('syncDesc');
   const syncNowRow = document.getElementById('syncNowRow');
+  const headerSyncBtn = document.getElementById('headerSyncBtn');
   if (!desc) return;
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
     if (syncNowRow) syncNowRow.style.display = '';
+    if (headerSyncBtn) headerSyncBtn.style.display = '';
   } else {
     desc.textContent = 'Share your garden across devices';
     if (syncNowRow) syncNowRow.style.display = 'none';
+    if (headerSyncBtn) headerSyncBtn.style.display = 'none';
+  }
+}
+
+async function headerSync() {
+  const btn = document.getElementById('headerSyncBtn');
+  const icon = document.getElementById('headerSyncIcon');
+  if (btn) btn.disabled = true;
+  if (icon) icon.style.animation = 'spin 1s linear infinite';
+  try {
+    await Sync.push();
+    const pulled = await Sync.pull();
+    if (pulled) { renderDashboard(); renderKnowledge(); }
+    showToast('Synced ✓');
+  } catch (e) {
+    showToast('Sync failed');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (icon) icon.style.animation = '';
+    updateSyncDesc();
   }
 }
 
