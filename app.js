@@ -146,7 +146,10 @@ let state = {
   searchQuery: '',
   filterAction: 'all',
   filterPlant: 'all',
-  showInactive: false
+  showInactive: false,
+  dashSearch: '',
+  dashFilterType: 'all',
+  dashFilterStatus: 'active'
 };
 
 // ============================================================
@@ -214,29 +217,64 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // ============================================================
 function renderDashboard() {
   const allPlants = DB.getPlants();
-  const inactiveCount = allPlants.filter(p => p.active === false).length;
-  const plants = state.showInactive ? allPlants : allPlants.filter(p => p.active !== false);
+
+  // Build type filter chips from plants that actually exist
+  const types = [...new Set(allPlants.map(p => p.type).filter(Boolean))].sort();
+
+  // Render filter bar (search + status + type chips)
+  const filterBar = document.getElementById('dashFilterBar');
+  if (filterBar) {
+    const statusOptions = [
+      { val: 'active', label: 'Active' },
+      { val: 'inactive', label: 'Inactive' },
+      { val: 'all', label: 'All' }
+    ];
+    filterBar.innerHTML = `
+      <div class="dash-search-wrap">
+        <svg class="dash-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="dash-search-input" id="dashSearchInput" type="search" placeholder="Search plants…" autocomplete="off" value="${esc(state.dashSearch)}" oninput="setDashSearch(this.value)">
+        ${state.dashSearch ? `<button class="dash-search-clear" onclick="setDashSearch('')">✕</button>` : ''}
+      </div>
+      <div class="dash-chips">
+        ${statusOptions.map(o => `<button class="chip${state.dashFilterStatus === o.val ? ' active' : ''}" onclick="setDashStatus('${o.val}')">${o.label}</button>`).join('')}
+        ${types.length ? `<div class="chip-divider"></div>` : ''}
+        ${types.map(t => `<button class="chip${state.dashFilterType === t ? ' active' : ''}" onclick="setDashType('${t}')">${esc(t)}</button>`).join('')}
+      </div>`;
+  }
+
+  // Apply filters
+  let plants = allPlants;
+  if (state.dashFilterStatus === 'active') plants = plants.filter(p => p.active !== false);
+  else if (state.dashFilterStatus === 'inactive') plants = plants.filter(p => p.active === false);
+  if (state.dashFilterType !== 'all') plants = plants.filter(p => p.type === state.dashFilterType);
+  if (state.dashSearch) {
+    const q = state.dashSearch.toLowerCase();
+    plants = plants.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      (p.type || '').toLowerCase().includes(q) ||
+      (p.location || '').toLowerCase().includes(q)
+    );
+  }
+
+  // Update count
+  const count = document.getElementById('plantCount');
+  if (count) count.textContent = plants.length ? `${plants.length} plant${plants.length !== 1 ? 's' : ''}` : '';
 
   const grid = document.getElementById('plantsGrid');
-  const count = document.getElementById('plantCount');
-  count.textContent = plants.length ? `${plants.length} plant${plants.length !== 1 ? 's' : ''}` : '';
-
-  // Show/hide the inactive toggle
-  const toggleBtn = document.getElementById('inactiveToggle');
-  if (inactiveCount === 0) {
-    toggleBtn.style.display = 'none';
-    state.showInactive = false;
-  } else {
-    toggleBtn.style.display = '';
-    toggleBtn.textContent = state.showInactive ? 'Hide inactive' : `+${inactiveCount} inactive`;
-    toggleBtn.classList.toggle('on', state.showInactive);
+  if (!allPlants.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🌱</div>
+      <div class="empty-title">No plants yet</div>
+      <div class="empty-desc">Tap the <strong>+</strong> button below to add your first plant.</div>
+    </div>`;
+    return;
   }
 
   if (!plants.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-      <div class="empty-icon">🌱</div>
-      <div class="empty-title">No plants yet</div>
-      <div class="empty-desc">Tap the <strong>+</strong> button below to add your first plant and start tracking its care.</div>
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">No matches</div>
+      <div class="empty-desc">Try a different search or filter.</div>
     </div>`;
     return;
   }
@@ -245,13 +283,9 @@ function renderDashboard() {
     const inactive = plant.active === false;
     const lastAction = DB.getLastAction(plant.id);
     const daysSinceAny = lastAction ? daysSince(lastAction.date) : null;
-
-    let activityBadge = '';
-    if (daysSinceAny !== null) {
-      activityBadge = `<span class="badge badge-earth">${actionEmoji(lastAction.action)} ${daysSinceAny === 0 ? 'Today' : daysSinceAny + 'd ago'}</span>`;
-    }
+    const activityBadge = daysSinceAny !== null
+      ? `<span class="badge badge-earth">${actionEmoji(lastAction.action)} ${daysSinceAny === 0 ? 'Today' : daysSinceAny + 'd ago'}</span>` : '';
     const inactiveBadge = inactive ? `<span class="badge badge-inactive">Inactive</span>` : '';
-
     return `<div class="plant-card${inactive ? ' inactive' : ''}" onclick="showDetail('${esc(plant.id)}')">
       <div class="plant-card-header">
         <div class="plant-icon">${esc(plant.emoji || '🌱')}</div>
@@ -261,9 +295,7 @@ function renderDashboard() {
           ${plant.location ? `<div class="plant-location"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
         </div>
       </div>
-      <div class="plant-card-meta">
-        ${inactiveBadge}${activityBadge}
-      </div>
+      <div class="plant-card-meta">${inactiveBadge}${activityBadge}</div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
         <button class="quick-btn quick-btn-note" onclick="openAddLog('${esc(plant.id)}')">📝 Note</button>
       </div>
@@ -271,10 +303,16 @@ function renderDashboard() {
   }).join('');
 }
 
-function toggleShowInactive() {
-  state.showInactive = !state.showInactive;
+function setDashSearch(val) {
+  state.dashSearch = val;
   renderDashboard();
+  // keep focus in the input
+  const inp = document.getElementById('dashSearchInput');
+  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
+function setDashStatus(val) { state.dashFilterStatus = val; renderDashboard(); }
+function setDashType(val) { state.dashFilterType = state.dashFilterType === val ? 'all' : val; renderDashboard(); }
+function toggleShowInactive() { state.dashFilterStatus = state.dashFilterStatus === 'inactive' ? 'active' : 'inactive'; renderDashboard(); }
 
 // ============================================================
 // KNOWLEDGE: PLANT TYPE EMOJIS

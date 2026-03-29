@@ -51,6 +51,20 @@ a{color:var(--g3);text-decoration:none}
 .view{display:none}
 .view.active{display:block}
 
+/* Dashboard filter bar */
+#dashFilterBar{margin-bottom:12px}
+.dash-search-wrap{position:relative;display:flex;align-items:center;margin-bottom:8px}
+.dash-search-icon{position:absolute;left:10px;color:var(--text3);pointer-events:none;flex-shrink:0}
+.dash-search-input{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:var(--r);padding:8px 32px 8px 32px;font-size:14px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
+.dash-search-input:focus{border-color:var(--g4)}
+.dash-search-clear{position:absolute;right:8px;color:var(--text3);font-size:14px;padding:4px;line-height:1}
+.dash-search-clear:hover{color:var(--text)}
+.dash-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip-divider{width:1px;height:18px;background:var(--border);margin:0 2px}
+.chip{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--card);color:var(--text2);transition:all .15s;white-space:nowrap}
+.chip:hover{border-color:var(--g5);color:var(--text)}
+.chip.active{background:var(--g5);border-color:var(--g5);color:#fff}
+
 /* Plant cards */
 .cards-grid{display:grid;grid-template-columns:1fr;gap:12px}
 @media(min-width:500px){.cards-grid{grid-template-columns:repeat(2,1fr)}}
