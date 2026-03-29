@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#2d5016">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Garden Journal v1.8</title>
+<title>Garden Journal v1.9</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
   <button class="header-back" id="backBtn" style="display:none" aria-label="Back">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
   </button>
-  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.8</span></div>
+  <div class="header-title" id="headerTitle">🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.9</span></div>
   <div class="header-actions" id="headerActions">
     <button class="header-btn" id="searchNavBtn" title="Search" aria-label="Search">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -28,15 +28,30 @@
 <!-- ========= VIEWS ========= -->
 
 <!-- Dashboard -->
-<main class="main view active" id="viewDashboard">
-  <div class="section-title">
-    <span>My Plants</span>
-    <div style="display:flex;align-items:center;gap:8px">
-      <span class="plant-count" id="plantCount"></span>
-      <button class="inactive-toggle" id="inactiveToggle" onclick="toggleShowInactive()" style="display:none"></button>
+<main class="main main-wide view active" id="viewDashboard">
+  <div class="dashboard-layout">
+
+    <!-- Left pane: Plants -->
+    <div class="dashboard-pane">
+      <div class="section-title">
+        <span>My Plants</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="plant-count" id="plantCount"></span>
+          <button class="inactive-toggle" id="inactiveToggle" onclick="toggleShowInactive()" style="display:none"></button>
+        </div>
+      </div>
+      <div class="cards-grid" id="plantsGrid"></div>
     </div>
+
+    <!-- Right pane: Knowledge -->
+    <div class="dashboard-pane">
+      <div class="section-title">
+        <span>🌱 Knowledge</span>
+      </div>
+      <div class="knowledge-grid" id="knowledgeGrid"></div>
+    </div>
+
   </div>
-  <div class="cards-grid" id="plantsGrid"></div>
 </main>
 
 <!-- Search -->
@@ -114,7 +129,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-row-icon" style="background:var(--g7)">🌿</div>
-        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.8 · Pure HTML/JS/CSS</div></div>
+        <div class="settings-row-text"><div class="settings-row-label">Garden Journal</div><div class="settings-row-desc">v1.9 · Pure HTML/JS/CSS</div></div>
       </div>
     </div>
   </div>
@@ -317,6 +332,28 @@
     </div>
   </div>
   <button class="photo-viewer-next" id="photoViewerNext" onclick="photoViewerNav(1)" aria-label="Next photo">❯</button>
+</div>
+
+<!-- Knowledge Card Modal -->
+<div class="modal-overlay" id="modalKnowledge">
+  <div class="modal-backdrop" onclick="closeModal('modalKnowledge')"></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalKnowledgeTitle">
+    <div class="modal-header">
+      <div class="modal-title" id="modalKnowledgeTitle"></div>
+      <button class="modal-close" onclick="closeModal('modalKnowledge')" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="knowledgeId">
+      <div class="form-group">
+        <label class="form-label" for="knowledgeContent">Notes &amp; tips</label>
+        <textarea id="knowledgeContent" rows="14" placeholder="Write your tips, observations, and notes here…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('modalKnowledge')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveKnowledgeCard()">Save</button>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->

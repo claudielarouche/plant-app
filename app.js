@@ -31,14 +31,18 @@ const DB = {
   KEY_PLANTS: 'gj_plants',
   KEY_LOGS: 'gj_logs',
   KEY_SETTINGS: 'gj_settings',
+  KEY_KNOWLEDGE: 'gj_knowledge',
 
   getPlants() { try { return JSON.parse(localStorage.getItem(this.KEY_PLANTS) || '[]'); } catch { return []; } },
   getLogs() { try { return JSON.parse(localStorage.getItem(this.KEY_LOGS) || '[]'); } catch { return []; } },
   getSettings() { try { return JSON.parse(localStorage.getItem(this.KEY_SETTINGS) || '{}'); } catch { return {}; } },
+  getKnowledge() { try { return JSON.parse(localStorage.getItem(this.KEY_KNOWLEDGE) || '[]'); } catch { return []; } },
 
   savePlants(p) { localStorage.setItem(this.KEY_PLANTS, JSON.stringify(p)); },
   saveLogs(l) { localStorage.setItem(this.KEY_LOGS, JSON.stringify(l)); },
   saveSettings(s) { localStorage.setItem(this.KEY_SETTINGS, JSON.stringify(s)); },
+  saveKnowledge(k) { localStorage.setItem(this.KEY_KNOWLEDGE, JSON.stringify(k)); },
+  updateKnowledgeCard(card) { const a = this.getKnowledge().map(x => x.id === card.id ? card : x); this.saveKnowledge(a); },
 
   addPlant(p) { const a = this.getPlants(); a.push(p); this.savePlants(a); },
   updatePlant(p) { const a = this.getPlants().map(x => x.id === p.id ? p : x); this.savePlants(a); },
@@ -156,7 +160,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.8</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v1.9</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -166,7 +170,7 @@ function navigate(view) {
     setTimeout(() => document.getElementById('searchInput').focus(), 100);
     renderSearch();
   }
-  if (view === 'dashboard') renderDashboard();
+  if (view === 'dashboard') { renderDashboard(); renderKnowledge(); }
 }
 
 function showDetail(plantId) {
@@ -262,6 +266,52 @@ function renderDashboard() {
 function toggleShowInactive() {
   state.showInactive = !state.showInactive;
   renderDashboard();
+}
+
+// ============================================================
+// RENDER: KNOWLEDGE PANE
+// ============================================================
+function renderKnowledge() {
+  const cards = DB.getKnowledge();
+  const grid = document.getElementById('knowledgeGrid');
+  if (!grid) return;
+  grid.innerHTML = cards.map(card => {
+    const preview = card.content
+      ? card.content.split('\n').filter(l => l.trim()).slice(0, 3).join(' · ')
+      : 'No notes yet — tap to add.';
+    return `<div class="knowledge-card" onclick="openKnowledgeCard('${esc(card.id)}')">
+      <div class="knowledge-card-header">
+        <span class="knowledge-emoji">${esc(card.emoji)}</span>
+        <span class="knowledge-title">${esc(card.category)}</span>
+        <button class="knowledge-edit-btn" onclick="event.stopPropagation();openKnowledgeCard('${esc(card.id)}')">Edit</button>
+      </div>
+      <div class="knowledge-preview">${esc(preview)}</div>
+    </div>`;
+  }).join('');
+}
+
+function openKnowledgeCard(id) {
+  const card = DB.getKnowledge().find(c => c.id === id);
+  if (!card) return;
+  document.getElementById('knowledgeId').value = card.id;
+  document.getElementById('modalKnowledgeTitle').textContent = card.emoji + ' ' + card.category;
+  document.getElementById('knowledgeContent').value = card.content || '';
+  openModal('modalKnowledge');
+  setTimeout(() => document.getElementById('knowledgeContent').focus(), 100);
+}
+
+function saveKnowledgeCard() {
+  const id = document.getElementById('knowledgeId').value;
+  const content = document.getElementById('knowledgeContent').value;
+  const cards = DB.getKnowledge();
+  const card = cards.find(c => c.id === id);
+  if (!card) return;
+  card.content = content;
+  card.updatedAt = new Date().toISOString();
+  DB.updateKnowledgeCard(card);
+  closeModal('modalKnowledge');
+  renderKnowledge();
+  showToast('Saved ✓');
 }
 
 // ============================================================
@@ -1035,7 +1085,70 @@ function actionEmoji(action) { return ACTION_EMOJIS[action] || '📝'; }
 async function init() {
   updateSyncDesc();
 
+  // Seed knowledge cards if first run
+  if (!DB.getKnowledge().length) {
+    const knowledgeCards = [
+      {
+        id: uuid(), emoji: '🏠', category: 'Indoors Gardening Tips',
+        content: `Light: Most edibles need 6–8h direct sun or 12–16h under grow lights.\nSoil: Always use potting mix — never garden soil. Add 20–30% perlite for drainage.\nWatering: Overwatering is the #1 killer. Check 2 inches deep before watering.\nHumidity: 40–60% is ideal. Group plants together or use a tray with pebbles and water.\nFertilizing: Feed every 2–4 weeks with balanced liquid fertilizer during the growing season.\nTemperature: Most edibles prefer 65–80°F (18–27°C). Keep away from cold drafts.\nRotation: Turn pots a quarter-turn each week so all sides get equal light.\nPests: Yellow sticky traps catch fungus gnats. Neem oil handles most soft-bodied insects.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🍅', category: 'Tomatoes',
+        content: `Best indoor varieties: Tiny Tim, Tumbling Tom, Micro Tom, Sweet 100.\nLight: 8+ hours bright sun or 16h under grow lights.\nPollination: Gently shake flowering stems daily, or use a small brush to transfer pollen between flowers.\nSupport: Indeterminate types need staking or caging. Bush types stay compact.\nWatering: Keep consistently moist. Irregular watering causes blossom end rot and cracking.\nFertilizing: Switch to high-phosphorus/potassium fertilizer when flowers appear.\nPruning: Pinch suckers on indeterminate varieties for better yield and airflow.\nIdeal temp: 65–80°F (18–27°C). Below 55°F stops fruit set.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🧄', category: 'Garlic',
+        content: `Planting: Break bulb into cloves, plant pointed-end up, 1 inch deep.\nLight: 6–8h of light. Tolerates slightly lower light than most vegetables.\nWatering: Water when the top inch of soil is dry. Do not overwater.\nHarvest (greens): Snip tops at any time for fresh garlic flavor — they regrow.\nHarvest (bulbs): Takes 8–9 months. Better suited to outdoor growing for full bulbs.\nQuick crop tip: Plant multiple cloves close together in a pot and harvest the greens continuously like herbs.\nContainer size: At least 6 inches deep for greens; 8–12 inches for attempting bulbs.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🌿', category: 'Green Onions',
+        content: `Regrowing from scraps: Place store-bought root ends in 1 inch of water. Roots appear within days.\nWater method: Change water every 2 days. Harvest outer leaves and they keep regrowing for weeks.\nSoil method: Transplant rooted scraps to soil for more robust growth and flavour.\nFrom seed: Ready in 3–4 weeks. Sow densely, thin to 1 inch apart.\nHarvesting: Snip from the top, always leaving at least 1 inch of green so the plant regrows.\nLight: 4–6h of light is enough — one of the most shade-tolerant edibles.\nNo fertilizer needed for water-grown plants. Feed soil-grown ones monthly.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🥬', category: 'Celery',
+        content: `Regrowing from scraps: Cut base 2 inches from bottom, place cut-side up in a shallow dish of water.\nRoots and new shoots appear in 5–7 days. Transplant to soil once roots reach 1–2 inches.\nLight: 6+ hours or grow lights. One of the more light-demanding regrow crops.\nWatering: Never let celery dry out — it needs consistently moist soil.\nTemperature: Prefers cooler temps 60–70°F (15–21°C). Bolts in heat.\nTimeline: 3–5 months from transplant to harvestable stalks.\nSoil: Rich, moisture-retaining potting mix. Add compost if available.\nFertilizing: Feed every 2 weeks with nitrogen-rich fertilizer for leafy growth.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🥒', category: 'Cucumber',
+        content: `Best indoor varieties: Bush Pickle, Patio Snacker, Spacemaster, Salad Bush.\nLight: Very demanding — 8+ hours bright sun or strong grow lights. This is non-negotiable.\nPollination: Male flowers appear first (no bump behind petal). Female flowers have a tiny cucumber behind them. Transfer pollen with a soft brush or cotton swab.\nSupport: Train vines up a trellis or bamboo stake. Saves space and improves airflow.\nWatering: Keep soil consistently moist. Inconsistent watering causes bitter, misshapen fruit.\nHarvesting: Pick frequently (every 2–3 days) to encourage more fruit. Don't let them over-ripen.\nIdeal temp: 70–85°F (21–29°C). Cold stresses the plant significantly.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🍓', category: 'Strawberries',
+        content: `Best varieties for indoors: Day-neutral types (Albion, Seascape, Tristar) produce year-round regardless of day length.\nLight: 6–8h bright sun or 12+ hours under grow lights.\nSoil: Slightly acidic (pH 5.5–6.5). Add a little peat moss to standard potting mix.\nRunners: Remove them to focus energy on fruit production. Pot them separately if you want new plants.\nPollination: Gently brush flowers with a soft paintbrush for better fruit set indoors.\nFertilizing: Use high-potassium fertilizer when flowers and fruit appear.\nReplanting: Replace plants every 2–3 years — yield declines with age.\nContainer: At least 8 inches wide and deep. Hanging baskets work well for runners.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🌶️', category: 'Peppers',
+        content: `Best compact varieties: Lunchbox, NuMex Twilight, Tabasco, Chenzo, Redskin.\nLight: Very high — 8+ hours or 16h under grow lights. Similar demands to tomatoes.\nPollination: Shake plants gently or use a small brush. Peppers are mostly self-pollinating.\nOverwintering: Cut back by 2/3 in autumn and keep in a bright spot. Peppers are perennial — same plant can produce for years.\nHeat and capsaicin: Mild water stress during fruiting increases heat in hot varieties.\nFertilizing: Balanced feed while growing; switch to high-potassium when fruiting.\nTemp: Ideal 70–85°F (21–30°C). Very sensitive to cold — keep above 55°F at all times.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🥗', category: 'Lettuce & Greens',
+        content: `One of the easiest indoor crops — tolerates lower light than most edibles.\nVarieties: Loose-leaf types (Black Seeded Simpson, Oak Leaf, Butterhead) are best for cut-and-come-again.\nHarvesting: Take outer leaves only, letting the center keep growing. One plant can produce for months.\nSuccession planting: Sow a few seeds every 2–3 weeks for a continuous harvest.\nTemperature: Prefers cool conditions 60–70°F (15–21°C). Bolts and turns bitter in heat.\nGermination tip: Soak seeds in cool water overnight for faster sprouting.\nSpinach & arugula follow the same general rules — all great for indoor growing.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🌱', category: 'Herbs',
+        content: `Basil: Loves heat and full sun. Pinch flower buds as soon as they appear to keep leaves coming.\nMint: Extremely vigorous — always grow in its own pot or it takes over. Tolerates partial shade.\nParsley: Slow to germinate (3 weeks). Keep soil consistently moist. Does well in lower light.\nChives: Very easy. Cut to 1 inch and they regrow. Tolerates lower light than most herbs.\nCilantro: Bolts quickly in heat. Sow in cool conditions. Harvest before it flowers.\nThyme & Oregano: Drought-tolerant Mediterranean herbs. Full sun essential. Easy to overwater.\nRosemary: Needs excellent drainage and strong light. Most common cause of death is root rot from overwatering.`,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: uuid(), emoji: '🌾', category: 'Microgreens',
+        content: `Fastest indoor crop — most varieties ready in 7–14 days from seed.\nBest varieties to start: Radish, sunflower, peas, broccoli, kale, arugula, basil.\nSetup: Shallow tray (1–2 inches deep), potting mix or coco coir, dense seed sowing.\nGermination: Cover with a second tray or dome for 3–4 days to retain moisture and darkness.\nHarvesting: Cut just above the soil line when first true leaves appear (or at cotyledon stage).\nLight: Once uncovered, they need bright light or grow lights to avoid legginess.\nNo fertilizer needed — seeds carry all nutrients for this stage.\nRinse and eat immediately after cutting for best flavour and nutrition.`,
+        updatedAt: new Date().toISOString()
+      },
+    ];
+    DB.saveKnowledge(knowledgeCards);
+  }
+
   renderDashboard();
+  renderKnowledge();
 
   if (settings.gardenId) {
     Sync.syncIfNeeded();
