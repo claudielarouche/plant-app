@@ -189,7 +189,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v2.1</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v2.2</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -499,11 +499,14 @@ function renderDetail(plantId) {
     const label = `${monthNames[parseInt(m)-1]} ${y}`;
     const entriesHTML = [...entries].reverse().map(log => {
       const actionClass = `action-${log.action}`;
+      const heightLabel = (log.action === 'measured' && log.height != null)
+        ? `<div class="entry-height">📏 ${log.height} ${log.heightUnit || 'cm'}</div>` : '';
       return `<div class="timeline-entry">
         <div class="entry-dot ${actionClass}">${actionEmoji(log.action)}</div>
         <div class="entry-content">
           <div class="entry-action">${capitalize(log.action)}</div>
           <div class="entry-date">${formatDate(log.date)}</div>
+          ${heightLabel}
           ${log.notes ? `<div class="entry-notes">${esc(log.notes)}</div>` : ''}
           ${log.photo ? `<img class="entry-photo" src="${log.photo}" loading="lazy" alt="log photo" onclick="openLogPhoto('${encodeURIComponent(log.photo)}','${log.date || ''}','${plant.startDate || ''}','${esc(plant.id)}')">` : ''}
           <div class="entry-actions">
@@ -530,6 +533,7 @@ function renderDetail(plantId) {
         ${plant.location ? `<div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
         ${plant.startDate ? `<div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Started ${formatDate(plant.startDate)}</div>` : ''}
         ${plant.notes ? `<div class="meta-row" style="align-items:flex-start"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:2px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span style="white-space:pre-wrap">${esc(plant.notes)}</span></div>` : ''}
+        ${(() => { const hLog = [...logs].reverse().find(l => l.action === 'measured' && l.height != null); return hLog ? `<div class="meta-row"><span style="font-size:15px;line-height:1">📏</span> ${hLog.height} ${hLog.heightUnit || 'cm'} <span style="color:var(--text3);font-size:12px">as of ${formatDate(hLog.date)}</span></div>` : ''; })()}
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-secondary btn-sm" onclick="openEditPlant('${esc(plant.id)}')">✏️ Edit plant</button>
@@ -750,6 +754,8 @@ function openAddLog(plantId) {
 
   document.querySelectorAll('#actionGrid .action-option').forEach(el => el.classList.remove('selected'));
   document.querySelector('#actionGrid .action-option[data-action="observed"]').classList.add('selected');
+  document.getElementById('heightGroup').style.display = 'none';
+  document.getElementById('logHeight').value = '';
 
   document.getElementById('modalLogTitle').textContent = 'Log Entry';
   openModal('modalLog');
@@ -767,6 +773,16 @@ function editLog(logId) {
   document.querySelectorAll('#actionGrid .action-option').forEach(el => {
     el.classList.toggle('selected', el.dataset.action === log.action);
   });
+
+  const isMeasured = log.action === 'measured';
+  document.getElementById('heightGroup').style.display = isMeasured ? 'block' : 'none';
+  if (isMeasured && log.height != null) {
+    document.getElementById('logHeight').value = log.height;
+    setHeightUnit(log.heightUnit || 'cm');
+  } else {
+    document.getElementById('logHeight').value = '';
+    setHeightUnit('cm');
+  }
 
   if (log.photo) {
     document.getElementById('logPhotoPreview').src = log.photo;
@@ -801,12 +817,16 @@ async function saveLog() {
     if (cloud) { photo = cloud.url; photoId = cloud.photoId; }
   }
 
+  const heightVal = action === 'measured' ? parseFloat(document.getElementById('logHeight').value) : null;
+
   const existing = DB.getLogs().find(l => l.id === id);
   const log = {
     ...(existing || {}),
     id, plantId, action, date, notes,
     photo: photo || null,
     photoId: photoId || null,
+    height: (!isNaN(heightVal) && heightVal !== null) ? heightVal : null,
+    heightUnit: action === 'measured' ? _heightUnit : null,
     updatedAt: new Date().toISOString()
   };
 
@@ -839,6 +859,14 @@ function confirmDeleteLog(logId) {
 function selectAction(el) {
   document.querySelectorAll('#actionGrid .action-option').forEach(x => x.classList.remove('selected'));
   el.classList.add('selected');
+  document.getElementById('heightGroup').style.display = el.dataset.action === 'measured' ? 'block' : 'none';
+}
+
+let _heightUnit = 'cm';
+function setHeightUnit(unit) {
+  _heightUnit = unit;
+  document.getElementById('unitCm').classList.toggle('active', unit === 'cm');
+  document.getElementById('unitIn').classList.toggle('active', unit === 'in');
 }
 
 // ============================================================
@@ -1430,7 +1458,7 @@ function showToast(msg) {
 // ============================================================
 const ACTION_EMOJIS = {
   fertilized: '🌿', pruned: '✂️', repotted: '🪴',
-  treated: '💊', observed: '👀', harvested: '🌾', other: '📝'
+  treated: '💊', observed: '👀', measured: '📏', harvested: '🌾', other: '📝'
 };
 function actionEmoji(action) { return ACTION_EMOJIS[action] || '📝'; }
 

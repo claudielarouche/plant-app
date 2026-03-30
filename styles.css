@@ -147,6 +147,7 @@ a{color:var(--g3);text-decoration:none}
 .entry-content{flex:1;min-width:0}
 .entry-action{font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px}
 .entry-date{font-size:12px;color:var(--text3);margin-top:2px}
+.entry-height{font-size:14px;font-weight:700;color:var(--g2);margin-top:4px}
 .entry-notes{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 .entry-photo{width:100%;max-width:280px;border-radius:var(--rs);margin-top:8px;cursor:pointer}
 .entry-actions{display:flex;gap:4px;margin-top:8px}
@@ -191,6 +192,10 @@ a{color:var(--g3);text-decoration:none}
 .form-group{margin-bottom:16px}
 .form-label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px}
 .form-label span{color:var(--text3);font-weight:400}
+.height-input-row{display:flex;align-items:center;gap:10px}
+.unit-toggle{display:flex;border-radius:20px;overflow:hidden;border:1.5px solid var(--border2)}
+.unit-btn{padding:6px 14px;font-size:13px;font-weight:600;color:var(--text3);background:var(--bg);border:none;cursor:pointer;transition:background .15s,color .15s}
+.unit-btn.active{background:var(--g3);color:#fff}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-hint{font-size:12px;color:var(--text3);margin-top:4px}
 .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
