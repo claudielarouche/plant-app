@@ -713,6 +713,10 @@ function confirmDeletePlant(id) {
   const p = DB.getPlants().find(x => x.id === id);
   if (!p) return;
   if (confirm(`Delete "${p.name}"? This will also delete all ${DB.getPlantLogs(id).length} log entries.`)) {
+    // Clean up cloud photos for this plant
+    (p.photos || []).forEach(ph => { if (ph.photoId) deletePhotoFromCloud(ph.photoId); });
+    // Clean up cloud photos from logs
+    DB.getPlantLogs(id).forEach(l => { if (l.photoId) deletePhotoFromCloud(l.photoId); });
     DB.deletePlant(id);
     showToast('Plant deleted');
     navigate('dashboard');
@@ -731,11 +735,19 @@ function addPlantPhoto(plantId) {
 function handlePlantPhoto(input, plantId) {
   const file = input.files[0];
   if (!file) return;
-  compressImage(file, 1200, 0.82, (dataUrl) => {
+  compressImage(file, 1200, 0.82, async (dataUrl) => {
     const plant = DB.getPlants().find(p => p.id === plantId);
     if (!plant) return;
     plant.photos = plant.photos || [];
-    plant.photos.push({ date: today(), data: dataUrl });
+
+    // Try uploading to cloud; fall back to base64 if not configured
+    const cloud = await uploadPhotoToCloud(dataUrl);
+    plant.photos.push({
+      date: today(),
+      data: cloud ? cloud.url : dataUrl,
+      photoId: cloud ? cloud.photoId : null
+    });
+
     DB.updatePlant(plant);
     renderDetail(plantId);
     schedulePush();
@@ -795,7 +807,7 @@ function editLog(logId) {
   openModal('modalLog');
 }
 
-function saveLog() {
+async function saveLog() {
   const id = document.getElementById('logId').value || uuid();
   const plantId = document.getElementById('logPlantId').value ||
     document.getElementById('logPlantSelect').value;
@@ -804,21 +816,24 @@ function saveLog() {
   const selectedAction = document.querySelector('#actionGrid .action-option.selected');
   const action = selectedAction ? selectedAction.dataset.action : 'observed';
   const date = document.getElementById('logDate').value || today();
-
   const notes = document.getElementById('logNotes').value.trim();
-  const photo = document.getElementById('logPhotoPreview').style.display !== 'none'
-    ? document.getElementById('logPhotoPreview').src
-    : null;
+
+  const previewEl = document.getElementById('logPhotoPreview');
+  let photo = previewEl.style.display !== 'none' ? previewEl.src : null;
+  let photoId = previewEl.dataset.photoId || null;
+
+  // If it's a new base64 photo, upload it to cloud
+  if (photo && photo.startsWith('data:')) {
+    const cloud = await uploadPhotoToCloud(photo);
+    if (cloud) { photo = cloud.url; photoId = cloud.photoId; }
+  }
 
   const existing = DB.getLogs().find(l => l.id === id);
   const log = {
     ...(existing || {}),
-    id,
-    plantId,
-    action,
-    date,
-    notes,
+    id, plantId, action, date, notes,
     photo: photo || null,
+    photoId: photoId || null,
     updatedAt: new Date().toISOString()
   };
 
@@ -840,6 +855,7 @@ function saveLog() {
 function confirmDeleteLog(logId) {
   if (confirm('Delete this log entry?')) {
     const log = DB.getLogs().find(l => l.id === logId);
+    if (log?.photoId) deletePhotoFromCloud(log.photoId);
     DB.deleteLog(logId);
     showToast('Entry deleted');
     if (state.view === 'detail' && log) renderDetail(log.plantId);
@@ -875,6 +891,91 @@ function clearLogPhoto() {
   preview.style.display = 'none';
   document.getElementById('removePhotoBtn').style.display = 'none';
   document.getElementById('logPhotoInput').value = '';
+}
+
+// ============================================================
+// CLOUD PHOTO STORAGE
+// ============================================================
+
+// Upload a base64 dataUrl → Netlify Blobs. Returns { photoId, url } or null.
+async function uploadPhotoToCloud(dataUrl) {
+  if (!Sync.getGardenId()) return null;
+  if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+  const photoId = uuid();
+  try {
+    const res = await fetch(`${Sync.endpoint}?op=photo&id=${photoId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl }),
+      signal: AbortSignal.timeout(30000)
+    });
+    if (!res.ok) {
+      console.warn('Photo upload failed HTTP', res.status);
+      return null;
+    }
+    return { photoId, url: `${Sync.endpoint}?op=photo&id=${photoId}` };
+  } catch (err) {
+    console.warn('Photo upload error:', err);
+    return null;
+  }
+}
+
+// Fire-and-forget cloud photo deletion
+function deletePhotoFromCloud(photoId) {
+  if (!photoId || !Sync.getGardenId()) return;
+  fetch(`${Sync.endpoint}?op=photo&id=${photoId}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(10000)
+  }).catch(err => console.warn('Photo delete error:', err));
+}
+
+// One-time migration: scan all base64 photos, upload to cloud, replace with URLs.
+async function migratePhotosToCloud() {
+  const s = DB.getSettings();
+  if (s.photosMigrated || !s.gardenId) return;
+
+  const plants = DB.getPlants();
+  const logs = DB.getLogs();
+  let changed = false;
+
+  for (const plant of plants) {
+    if (!plant.photos) continue;
+    for (const photo of plant.photos) {
+      if (photo.data && photo.data.startsWith('data:')) {
+        const result = await uploadPhotoToCloud(photo.data);
+        if (result) {
+          photo.data = result.url;
+          photo.photoId = result.photoId;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  for (const log of logs) {
+    if (log.photo && log.photo.startsWith('data:')) {
+      const result = await uploadPhotoToCloud(log.photo);
+      if (result) {
+        log.photo = result.url;
+        log.photoId = result.photoId;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    DB.savePlants(plants);
+    DB.saveLogs(logs);
+  }
+
+  const s2 = DB.getSettings();
+  s2.photosMigrated = true;
+  DB.saveSettings(s2);
+
+  if (changed) {
+    schedulePush();
+    showToast('📸 Photos moved to cloud ✓');
+  }
 }
 
 // ============================================================
@@ -1531,6 +1632,8 @@ async function init() {
 
   if (DB.getSettings().gardenId) {
     Sync.syncIfNeeded();
+    // Migrate any existing base64 photos to cloud storage
+    migratePhotosToCloud();
   }
 
   if (!DB.getPlants().length) {
