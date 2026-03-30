@@ -189,7 +189,7 @@ function navigate(view) {
   document.getElementById('detailFab').style.display = 'none';
   document.getElementById('searchNavBtn').style.display = view === 'dashboard' ? 'flex' : 'none';
   document.getElementById('headerTitle').innerHTML = {
-    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v2.0</span>',
+    dashboard: '🌿 Garden Journal <span style="font-size:11px;font-weight:700;background:var(--g7);color:var(--g3);padding:2px 7px;border-radius:20px;vertical-align:middle">v2.1</span>',
     search: 'Search',
     export: 'Export / Import',
     settings: 'Settings'
@@ -297,9 +297,13 @@ function renderDashboard() {
     return;
   }
 
+  // Load all logs once so we can find cover photos without repeated localStorage reads
+  const allLogs = DB.getLogs();
+
   grid.innerHTML = plants.map(plant => {
     const inactive = plant.active === false;
-    const lastAction = DB.getLastAction(plant.id);
+    const plantLogs = allLogs.filter(l => l.plantId === plant.id).sort((a,b) => a.date.localeCompare(b.date));
+    const lastAction = plantLogs.length ? plantLogs[plantLogs.length - 1] : null;
     const daysSinceAny = lastAction ? daysSince(lastAction.date) : null;
     const activityBadge = daysSinceAny !== null
       ? `<span class="badge badge-earth">${actionEmoji(lastAction.action)} ${daysSinceAny === 0 ? 'Today' : daysSinceAny + 'd ago'}</span>` : '';
@@ -307,12 +311,12 @@ function renderDashboard() {
     const age = plantCardAge(plant.startDate);
     const ageBadge = age ? `<span class="badge badge-age">🌱 ${age}</span>` : '';
 
-    // Most recent photo (last in array)
-    const photos = plant.photos || [];
-    const latestPhoto = photos.length ? photos[photos.length - 1] : null;
+    // Most recent log entry that has a photo
+    const latestPhotoLog = plantLogs.slice().reverse().find(l => l.photo);
+    const coverSrc = latestPhotoLog ? latestPhotoLog.photo : null;
 
-    const coverSection = latestPhoto
-      ? `<div class="plant-card-cover"><img src="${esc(latestPhoto.data)}" alt="${esc(plant.name)}" loading="lazy"></div>`
+    const coverSection = coverSrc
+      ? `<div class="plant-card-cover"><img src="${esc(coverSrc)}" alt="${esc(plant.name)}" loading="lazy"></div>`
       : `<div class="plant-card-cover plant-card-cover-empty"><span class="plant-cover-emoji">🌱</span></div>`;
 
     return `<div class="plant-card${inactive ? ' inactive' : ''}" onclick="showDetail('${esc(plant.id)}')">
@@ -501,7 +505,7 @@ function renderDetail(plantId) {
           <div class="entry-action">${capitalize(log.action)}</div>
           <div class="entry-date">${formatDate(log.date)}</div>
           ${log.notes ? `<div class="entry-notes">${esc(log.notes)}</div>` : ''}
-          ${log.photo ? `<img class="entry-photo" src="${log.photo}" loading="lazy" alt="log photo" onclick="openLogPhoto('${encodeURIComponent(log.photo)}','${log.date || ''}','${plant.startDate || ''}')">` : ''}
+          ${log.photo ? `<img class="entry-photo" src="${log.photo}" loading="lazy" alt="log photo" onclick="openLogPhoto('${encodeURIComponent(log.photo)}','${log.date || ''}','${plant.startDate || ''}','${esc(plant.id)}')">` : ''}
           <div class="entry-actions">
             <button class="entry-action-btn" onclick="editLog('${esc(log.id)}')">Edit</button>
             <button class="entry-action-btn" style="color:var(--red)" onclick="confirmDeleteLog('${esc(log.id)}')">Delete</button>
@@ -512,11 +516,6 @@ function renderDetail(plantId) {
     return `<div class="timeline-month">${label}</div>${entriesHTML}`;
   }).join('');
 
-  const photosHTML = (plant.photos || []).map((ph, i) =>
-    `<img class="photo-thumb" src="${ph.data}" loading="lazy" alt="plant photo ${i+1}" onclick="openPlantPhoto('${esc(plant.id)}',${i})">`
-  ).join('') + `<div class="add-photo-thumb" onclick="addPlantPhoto('${esc(plant.id)}')">
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-  </div>`;
 
   document.getElementById('detailContent').innerHTML = `
     <div class="plant-detail-header">
@@ -532,7 +531,6 @@ function renderDetail(plantId) {
         ${plant.startDate ? `<div class="meta-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Started ${formatDate(plant.startDate)}</div>` : ''}
         ${plant.notes ? `<div class="meta-row" style="align-items:flex-start"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:2px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span style="white-space:pre-wrap">${esc(plant.notes)}</span></div>` : ''}
       </div>
-      ${(plant.photos && plant.photos.length) || true ? `<div class="plant-photos">${photosHTML}</div>` : ''}
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-secondary btn-sm" onclick="openEditPlant('${esc(plant.id)}')">✏️ Edit plant</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDeletePlant('${esc(plant.id)}')">🗑️ Delete</button>
@@ -552,7 +550,6 @@ function renderDetail(plantId) {
       <div class="empty-desc">Tap the + button to record your first care action for this plant.</div>
     </div>`}
 
-    <input type="file" id="plantPhotoInput_${esc(plant.id)}" accept="image/*" capture="environment" style="display:none" onchange="handlePlantPhoto(this, '${esc(plant.id)}')">
   `;
 
   renderDetailKnowledge(plant);
@@ -729,35 +726,6 @@ function confirmDeletePlant(id) {
   }
 }
 
-// ============================================================
-// PLANT PHOTOS
-// ============================================================
-function addPlantPhoto(plantId) {
-  const input = document.getElementById(`plantPhotoInput_${plantId}`);
-  if (input) input.click();
-}
-
-function handlePlantPhoto(input, plantId) {
-  const file = input.files[0];
-  if (!file) return;
-  compressImage(file, 1200, 0.82, async (dataUrl) => {
-    const plant = DB.getPlants().find(p => p.id === plantId);
-    if (!plant) return;
-    plant.photos = plant.photos || [];
-
-    // Try uploading to cloud; fall back to base64 if not configured
-    const cloud = await uploadPhotoToCloud(dataUrl);
-    plant.photos.push({
-      date: today(),
-      data: cloud ? cloud.url : dataUrl,
-      photoId: cloud ? cloud.photoId : null
-    });
-
-    DB.updatePlant(plant);
-    renderDetail(plantId);
-    schedulePush();
-  });
-}
 
 // ============================================================
 // LOG CRUD
@@ -934,6 +902,47 @@ function deletePhotoFromCloud(photoId) {
   }).catch(err => console.warn('Photo delete error:', err));
 }
 
+// One-time migration: move plant.photos[] into "observed" log entries.
+function migratePlantPhotosToLogs() {
+  const s = DB.getSettings();
+  if (s.plantPhotosMigrated) return;
+
+  const plants = DB.getPlants();
+  const existingLogs = DB.getLogs();
+  const newLogs = [];
+  let plantsChanged = false;
+
+  for (const plant of plants) {
+    if (!plant.photos || !plant.photos.length) continue;
+    for (const photo of plant.photos) {
+      newLogs.push({
+        id: uuid(),
+        plantId: plant.id,
+        action: 'observed',
+        date: photo.date || plant.startDate || today(),
+        notes: '',
+        photo: photo.data || null,
+        photoId: photo.photoId || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+    plant.photos = [];
+    plantsChanged = true;
+  }
+
+  if (plantsChanged) DB.savePlants(plants);
+  if (newLogs.length) {
+    DB.saveLogs([...existingLogs, ...newLogs]);
+    showToast(`📸 ${newLogs.length} photo${newLogs.length !== 1 ? 's' : ''} moved to timeline ✓`);
+    schedulePush();
+  }
+
+  const s2 = DB.getSettings();
+  s2.plantPhotosMigrated = true;
+  DB.saveSettings(s2);
+}
+
 // One-time migration: scan all base64 photos, upload to cloud, replace with URLs.
 async function migratePhotosToCloud() {
   const s = DB.getSettings();
@@ -1023,13 +1032,28 @@ function openPlantPhoto(plantId, index) {
   _showPhotoViewer();
 }
 
-function openLogPhoto(encodedSrc, photoDate, plantStartDate) {
-  _photoCtx = {
-    photos: [{ src: decodeURIComponent(encodedSrc), date: photoDate || null }],
-    index: 0,
-    plantStartDate: plantStartDate || null,
-    plantId: null   // log photos are not directly editable here
-  };
+function openLogPhoto(encodedSrc, photoDate, plantStartDate, plantId) {
+  const currentSrc = decodeURIComponent(encodedSrc);
+
+  if (plantId) {
+    // Gather all photos for this plant from logs, sorted oldest→newest
+    const plant = DB.getPlants().find(p => p.id === plantId);
+    const logsWithPhotos = DB.getPlantLogs(plantId).filter(l => l.photo);
+    const idx = logsWithPhotos.findIndex(l => l.photo === currentSrc);
+    _photoCtx = {
+      photos: logsWithPhotos.map(l => ({ src: l.photo, date: l.date || null })),
+      index: idx >= 0 ? idx : 0,
+      plantStartDate: plant?.startDate || plantStartDate || null,
+      plantId
+    };
+  } else {
+    _photoCtx = {
+      photos: [{ src: currentSrc, date: photoDate || null }],
+      index: 0,
+      plantStartDate: plantStartDate || null,
+      plantId: null
+    };
+  }
   _showPhotoViewer();
 }
 
@@ -1634,6 +1658,9 @@ async function init() {
 
   renderDashboard();
   renderKnowledge();
+
+  // Migrate plant gallery photos → log entries (runs once, before cloud migration)
+  migratePlantPhotosToLogs();
 
   if (DB.getSettings().gardenId) {
     Sync.syncIfNeeded();
