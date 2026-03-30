@@ -5,7 +5,11 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(start python:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
-      "Bash(curl -s http://localhost:3000/app.js)"
+      "Bash(curl -s http://localhost:3000/app.js)",
+      "Bash(node --check app.js)",
+      "Bash(node --check \"C:\\\\Users\\\\claud\\\\Downloads\\\\Cowork\\\\plant-app\\\\app.js\")",
+      "Bash(python -c \":*)",
+      "Bash(curl -s \"http://localhost:55482/\")"
     ]
   }
 }

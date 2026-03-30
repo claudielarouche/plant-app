@@ -308,22 +308,9 @@
         <select id="logPlantSelect"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">Action</label>
-        <div class="action-grid" id="actionGrid">
-          <div class="action-option" data-action="fertilized" onclick="selectAction(this)"><span class="action-emoji">🌿</span>Fertilized</div>
-          <div class="action-option" data-action="pruned" onclick="selectAction(this)"><span class="action-emoji">✂️</span>Pruned</div>
-          <div class="action-option" data-action="repotted" onclick="selectAction(this)"><span class="action-emoji">🪴</span>Repotted</div>
-          <div class="action-option" data-action="treated" onclick="selectAction(this)"><span class="action-emoji">💊</span>Treated</div>
-          <div class="action-option selected" data-action="observed" onclick="selectAction(this)"><span class="action-emoji">👀</span>Observed</div>
-          <div class="action-option" data-action="measured" onclick="selectAction(this)"><span class="action-emoji">📏</span>Measured</div>
-          <div class="action-option" data-action="harvested" onclick="selectAction(this)"><span class="action-emoji">🌾</span>Harvested</div>
-          <div class="action-option" data-action="other" onclick="selectAction(this)"><span class="action-emoji">📝</span>Other</div>
-        </div>
-      </div>
-      <div class="form-group" id="heightGroup" style="display:none">
-        <label class="form-label">Height</label>
+        <label class="form-label">Height <span>(optional)</span></label>
         <div class="height-input-row">
-          <input type="number" id="logHeight" min="0" step="0.1" placeholder="0" style="width:90px">
+          <input type="number" id="logHeight" min="0" step="0.1" placeholder="e.g. 12">
           <div class="unit-toggle">
             <button class="unit-btn active" id="unitCm" onclick="setHeightUnit('cm')">cm</button>
             <button class="unit-btn" id="unitIn" onclick="setHeightUnit('in')">in</button>

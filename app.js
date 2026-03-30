@@ -6,7 +6,7 @@
 const uuid = () => ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
   (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 
 const formatDate = (d) => {
   if (!d) return '';
@@ -498,13 +498,12 @@ function renderDetail(plantId) {
     const [y, m] = month.split('-');
     const label = `${monthNames[parseInt(m)-1]} ${y}`;
     const entriesHTML = [...entries].reverse().map(log => {
-      const actionClass = `action-${log.action}`;
-      const heightLabel = (log.action === 'measured' && log.height != null)
+      const dotEmoji = log.height != null ? '📏' : (log.photo ? '📷' : '📝');
+      const heightLabel = log.height != null
         ? `<div class="entry-height">📏 ${log.height} ${log.heightUnit || 'cm'}</div>` : '';
       return `<div class="timeline-entry">
-        <div class="entry-dot ${actionClass}">${actionEmoji(log.action)}</div>
+        <div class="entry-dot">${dotEmoji}</div>
         <div class="entry-content">
-          <div class="entry-action">${capitalize(log.action)}</div>
           <div class="entry-date">${formatDate(log.date)}</div>
           ${heightLabel}
           ${log.notes ? `<div class="entry-notes">${esc(log.notes)}</div>` : ''}
@@ -631,11 +630,12 @@ function doSearch() {
   const logsHTML = filteredLogs.sort((a,b) => b.date.localeCompare(a.date)).map(log => {
     const plant = plantMap[log.plantId];
     if (!plant) return '';
+    const dotEmoji = log.height != null ? '📏' : (log.photo ? '📷' : '📝');
     return `<div class="timeline-entry" onclick="showDetail('${esc(plant.id)}')" style="cursor:pointer;background:var(--card);border-radius:var(--r);padding:14px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:8px">
-      <div class="entry-dot action-${log.action}">${actionEmoji(log.action)}</div>
+      <div class="entry-dot">${dotEmoji}</div>
       <div class="entry-content">
         <div class="entry-action">${esc(plant.emoji || '🌱')} ${esc(plant.name)}</div>
-        <div class="entry-date">${capitalize(log.action)} · ${formatDate(log.date)}</div>
+        <div class="entry-date">${formatDate(log.date)}${log.height != null ? ` · 📏 ${log.height} ${log.heightUnit || 'cm'}` : ''}</div>
         ${log.notes ? `<div class="entry-notes">${esc(log.notes)}</div>` : ''}
       </div>
     </div>`;
@@ -752,11 +752,8 @@ function openAddLog(plantId) {
     selectWrap.style.display = 'none';
   }
 
-  document.querySelectorAll('#actionGrid .action-option').forEach(el => el.classList.remove('selected'));
-  document.querySelector('#actionGrid .action-option[data-action="observed"]').classList.add('selected');
-  document.getElementById('heightGroup').style.display = 'none';
   document.getElementById('logHeight').value = '';
-
+  setHeightUnit('cm');
   document.getElementById('modalLogTitle').textContent = 'Log Entry';
   openModal('modalLog');
 }
@@ -770,19 +767,8 @@ function editLog(logId) {
   document.getElementById('logNotes').value = log.notes || '';
   document.getElementById('logPlantSelectWrap').style.display = 'none';
 
-  document.querySelectorAll('#actionGrid .action-option').forEach(el => {
-    el.classList.toggle('selected', el.dataset.action === log.action);
-  });
-
-  const isMeasured = log.action === 'measured';
-  document.getElementById('heightGroup').style.display = isMeasured ? 'block' : 'none';
-  if (isMeasured && log.height != null) {
-    document.getElementById('logHeight').value = log.height;
-    setHeightUnit(log.heightUnit || 'cm');
-  } else {
-    document.getElementById('logHeight').value = '';
-    setHeightUnit('cm');
-  }
+  document.getElementById('logHeight').value = log.height != null ? log.height : '';
+  setHeightUnit(log.heightUnit || 'cm');
 
   if (log.photo) {
     document.getElementById('logPhotoPreview').src = log.photo;
@@ -802,8 +788,7 @@ async function saveLog() {
     document.getElementById('logPlantSelect').value;
   if (!plantId) { showToast('Select a plant'); return; }
 
-  const selectedAction = document.querySelector('#actionGrid .action-option.selected');
-  const action = selectedAction ? selectedAction.dataset.action : 'observed';
+  const action = 'observed';
   const date = document.getElementById('logDate').value || today();
   const notes = document.getElementById('logNotes').value.trim();
 
@@ -817,7 +802,8 @@ async function saveLog() {
     if (cloud) { photo = cloud.url; photoId = cloud.photoId; }
   }
 
-  const heightVal = action === 'measured' ? parseFloat(document.getElementById('logHeight').value) : null;
+  const rawHeight = parseFloat(document.getElementById('logHeight').value);
+  const heightVal = !isNaN(rawHeight) && rawHeight > 0 ? rawHeight : null;
 
   const existing = DB.getLogs().find(l => l.id === id);
   const log = {
@@ -825,8 +811,8 @@ async function saveLog() {
     id, plantId, action, date, notes,
     photo: photo || null,
     photoId: photoId || null,
-    height: (!isNaN(heightVal) && heightVal !== null) ? heightVal : null,
-    heightUnit: action === 'measured' ? _heightUnit : null,
+    height: heightVal,
+    heightUnit: heightVal !== null ? _heightUnit : null,
     updatedAt: new Date().toISOString()
   };
 
@@ -836,7 +822,7 @@ async function saveLog() {
   } else {
     log.createdAt = new Date().toISOString();
     DB.addLog(log);
-    showToast(`${actionEmoji(action)} ${capitalize(action)} logged`);
+    showToast('Entry saved');
   }
 
   closeModal('modalLog');
