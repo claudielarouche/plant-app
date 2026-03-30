@@ -306,16 +306,23 @@ function renderDashboard() {
     const inactiveBadge = inactive ? `<span class="badge badge-inactive">Inactive</span>` : '';
     const age = plantCardAge(plant.startDate);
     const ageBadge = age ? `<span class="badge badge-age">🌱 ${age}</span>` : '';
+
+    // Most recent photo (last in array)
+    const photos = plant.photos || [];
+    const latestPhoto = photos.length ? photos[photos.length - 1] : null;
+
+    const coverSection = latestPhoto
+      ? `<div class="plant-card-cover"><img src="${esc(latestPhoto.data)}" alt="${esc(plant.name)}" loading="lazy"></div>`
+      : `<div class="plant-card-cover plant-card-cover-empty"><span class="plant-cover-emoji">🌱</span></div>`;
+
     return `<div class="plant-card${inactive ? ' inactive' : ''}" onclick="showDetail('${esc(plant.id)}')">
-      <div class="plant-card-header">
-        <div class="plant-icon">${esc(plant.emoji || '🌱')}</div>
-        <div class="plant-card-info">
-          <div class="plant-name">${esc(plant.name)}</div>
-          ${plant.type ? `<div class="plant-type">${esc(plant.type)}</div>` : ''}
-          ${plant.location ? `<div class="plant-location"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
-        </div>
+      ${coverSection}
+      <div class="plant-card-body">
+        <div class="plant-name">${esc(plant.name)}</div>
+        ${plant.type ? `<div class="plant-type">${esc(plant.type)}</div>` : ''}
+        ${plant.location ? `<div class="plant-location"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(plant.location)}</div>` : ''}
+        <div class="plant-card-meta">${inactiveBadge}${ageBadge}${activityBadge}</div>
       </div>
-      <div class="plant-card-meta">${inactiveBadge}${ageBadge}${activityBadge}</div>
       <div class="plant-card-actions" onclick="event.stopPropagation()">
         <button class="quick-btn quick-btn-note" onclick="openAddLog('${esc(plant.id)}')">📝 Note</button>
       </div>
@@ -650,7 +657,6 @@ function openAddPlant() {
   document.getElementById('plantType').value = '';
   document.getElementById('plantStart').value = today();
   document.getElementById('plantLocation').value = '';
-  document.getElementById('plantEmoji').value = '🌱';
   document.getElementById('plantStatus').value = 'active';
   document.getElementById('plantNotes').value = '';
   document.getElementById('modalPlantTitle').textContent = 'Add Plant';
@@ -666,7 +672,6 @@ function openEditPlant(id) {
   document.getElementById('plantType').value = p.type || '';
   document.getElementById('plantStart').value = p.startDate || '';
   document.getElementById('plantLocation').value = p.location || '';
-  document.getElementById('plantEmoji').value = p.emoji || '🌱';
   document.getElementById('plantStatus').value = p.active === false ? 'inactive' : 'active';
   document.getElementById('plantNotes').value = p.notes || '';
   document.getElementById('modalPlantTitle').textContent = 'Edit Plant';
@@ -687,7 +692,7 @@ function savePlant() {
     type: document.getElementById('plantType').value,
     startDate: document.getElementById('plantStart').value,
     location: document.getElementById('plantLocation').value.trim(),
-    emoji: document.getElementById('plantEmoji').value,
+    emoji: '🌱',
     notes: document.getElementById('plantNotes').value.trim(),
     active: document.getElementById('plantStatus').value !== 'inactive',
     updatedAt: new Date().toISOString()
