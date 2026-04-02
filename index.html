@@ -331,7 +331,7 @@
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('logPhotoInput').click()">📷 Attach photo</button>
           <button class="btn btn-secondary btn-sm" id="removePhotoBtn" style="display:none;color:var(--red)" onclick="removeLogPhoto()">Remove</button>
         </div>
-        <input type="file" id="logPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleLogPhoto(this)">
+        <input type="file" id="logPhotoInput" accept="image/*" style="display:none" onchange="handleLogPhoto(this)">
         <img id="logPhotoPreview" style="display:none;margin-top:10px;max-height:200px;border-radius:var(--rs);object-fit:cover" alt="preview">
       </div>
     </div>
