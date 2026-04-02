@@ -443,6 +443,16 @@ function renderKnowledge() {
   }).join('');
 }
 
+function openNewKnowledgeCard() {
+  document.getElementById('knowledgeId').value = '';
+  document.getElementById('modalKnowledgeTitle').textContent = 'New Knowledge Card';
+  document.getElementById('knowledgeTitle').value = '';
+  document.getElementById('knowledgeContent').value = '';
+  document.getElementById('deleteKnowledgeBtn').style.display = 'none';
+  openModal('modalKnowledge');
+  setTimeout(() => document.getElementById('knowledgeTitle').focus(), 100);
+}
+
 function openKnowledgeCard(id) {
   const card = DB.getKnowledge().find(c => c.id === id);
   if (!card) return;
@@ -450,6 +460,7 @@ function openKnowledgeCard(id) {
   document.getElementById('modalKnowledgeTitle').textContent = 'Edit Knowledge Card';
   document.getElementById('knowledgeTitle').value = card.category || '';
   document.getElementById('knowledgeContent').value = card.content || '';
+  document.getElementById('deleteKnowledgeBtn').style.display = '';
   openModal('modalKnowledge');
   setTimeout(() => document.getElementById('knowledgeTitle').focus(), 100);
 }
@@ -458,16 +469,38 @@ function saveKnowledgeCard() {
   const id = document.getElementById('knowledgeId').value;
   const title = document.getElementById('knowledgeTitle').value.trim();
   const content = document.getElementById('knowledgeContent').value;
+  if (!title) { showToast('Please enter a title'); return; }
   const cards = DB.getKnowledge();
-  const card = cards.find(c => c.id === id);
-  if (!card) return;
-  if (title) card.category = title;
-  card.content = content;
-  card.updatedAt = new Date().toISOString();
-  DB.updateKnowledgeCard(card);
+  if (id) {
+    // Edit existing
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    card.category = title;
+    card.content = content;
+    card.updatedAt = new Date().toISOString();
+    DB.saveKnowledge(cards);
+  } else {
+    // New card
+    cards.push({ id: uuid(), emoji: getPlantTypeEmoji(title), category: title, content, updatedAt: new Date().toISOString() });
+    DB.saveKnowledge(cards);
+  }
   closeModal('modalKnowledge');
   renderKnowledge();
+  schedulePush();
   showToast('Saved ✓');
+}
+
+function deleteKnowledgeCard() {
+  const id = document.getElementById('knowledgeId').value;
+  if (!id) return;
+  const card = DB.getKnowledge().find(c => c.id === id);
+  if (!card) return;
+  if (!confirm(`Delete "${card.category}"? This cannot be undone.`)) return;
+  DB.saveKnowledge(DB.getKnowledge().filter(c => c.id !== id));
+  closeModal('modalKnowledge');
+  renderKnowledge();
+  schedulePush();
+  showToast('Deleted');
 }
 
 // ============================================================
@@ -822,6 +855,7 @@ function editLog(logId) {
     document.getElementById('logPhotoPreview').src = log.photo;
     document.getElementById('logPhotoPreview').style.display = 'block';
     document.getElementById('removePhotoBtn').style.display = 'inline-flex';
+    document.getElementById('attachPhotoBtn').textContent = '📷 Change photo';
   } else {
     clearLogPhoto();
   }
@@ -919,6 +953,7 @@ function clearLogPhoto() {
   preview.src = '';
   preview.style.display = 'none';
   document.getElementById('removePhotoBtn').style.display = 'none';
+  document.getElementById('attachPhotoBtn').textContent = '📷 Attach photo';
   document.getElementById('logPhotoInput').value = '';
 }
 

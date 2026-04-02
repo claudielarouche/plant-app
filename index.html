@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Garden Journal v2.0</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -52,6 +53,7 @@
     <div class="dashboard-pane">
       <div class="section-title">
         <span>🌱 Knowledge</span>
+        <button class="btn btn-primary btn-sm" onclick="openNewKnowledgeCard()" style="padding:4px 12px;font-size:13px">+ Add</button>
       </div>
       <div class="knowledge-grid" id="knowledgeGrid"></div>
     </div>
@@ -336,7 +338,7 @@
       <div class="form-group">
         <label class="form-label">Photo <span>(optional)</span></label>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('logPhotoInput').click()">📷 Attach photo</button>
+          <button class="btn btn-secondary btn-sm" id="attachPhotoBtn" onclick="document.getElementById('logPhotoInput').click()">📷 Attach photo</button>
           <button class="btn btn-secondary btn-sm" id="removePhotoBtn" style="display:none;color:var(--red)" onclick="removeLogPhoto()">Remove</button>
         </div>
         <input type="file" id="logPhotoInput" accept="image/*" style="display:none" onchange="handleLogPhoto(this)">
@@ -422,6 +424,7 @@
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" id="deleteKnowledgeBtn" style="color:var(--red);display:none" onclick="deleteKnowledgeCard()">Delete</button>
       <button class="btn btn-secondary btn-sm" onclick="closeModal('modalKnowledge')">Cancel</button>
       <button class="btn btn-primary" onclick="saveKnowledgeCard()">Save</button>
     </div>
