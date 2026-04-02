@@ -123,15 +123,37 @@ const Sync = {
     setSyncDot('syncing');
     try {
       const remote = await this.fetchRemote();
-      const localModified = DB.getSettings().lastModified || '0';
-      const remoteModified = remote?.settings?.lastModified || '0';
 
-      if (!remote || localModified >= remoteModified) {
-        // Local is newer (or server is empty) — push
+      // No server data yet — safe to push
+      if (!remote || (!remote.plants?.length && !remote.logs?.length)) {
+        await this.push();
+        return 'pushed';
+      }
+
+      const localPlants = DB.getPlants().length;
+      const localLogs   = DB.getLogs().length;
+      const remPlants   = remote.plants?.length || 0;
+      const remLogs     = remote.logs?.length   || 0;
+
+      // Identical — nothing to do
+      if (localPlants === remPlants && localLogs === remLogs) {
+        setSyncDot('ok');
+        const s = DB.getSettings(); s.lastSync = new Date().toISOString(); DB.saveSettings(s);
+        updateSyncDesc();
+        return 'identical';
+      }
+
+      // Always ask the user when the two sides differ
+      setSyncDot('error');
+      const choice = await showSyncConflictDialog(
+        { plants: localPlants, logs: localLogs },
+        { plants: remPlants,   logs: remLogs   }
+      );
+      if (!choice) { setSyncDot('error'); return 'cancelled'; }
+      if (choice === 'push') {
         await this.push();
         return 'pushed';
       } else {
-        // Remote is newer — pull
         DB.importAll(remote);
         setSyncDot('ok');
         const s = DB.getSettings(); s.lastSync = new Date().toISOString(); DB.saveSettings(s);
@@ -142,6 +164,29 @@ const Sync = {
       setSyncDot('error');
       console.warn('Smart sync failed:', e);
       return 'error';
+    }
+  },
+
+  async restoreBackup() {
+    const id = this.getGardenId();
+    if (!id) return false;
+    setSyncDot('syncing');
+    try {
+      const res = await fetch(`${this.endpoint}?id=${encodeURIComponent(id)}&op=backup`, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.plants) { showToast('No backup found on server'); setSyncDot('error'); return false; }
+      DB.importAll(data);
+      setSyncDot('ok');
+      const s = DB.getSettings(); s.lastSync = new Date().toISOString(); DB.saveSettings(s);
+      updateSyncDesc();
+      renderDashboard(); renderKnowledge();
+      showToast(`Restored: ${data.plants.length} plants, ${data.logs.length} entries`);
+      return true;
+    } catch (e) {
+      setSyncDot('error');
+      showToast('Restore failed — ' + e.message);
+      return false;
     }
   },
 
@@ -402,18 +447,21 @@ function openKnowledgeCard(id) {
   const card = DB.getKnowledge().find(c => c.id === id);
   if (!card) return;
   document.getElementById('knowledgeId').value = card.id;
-  document.getElementById('modalKnowledgeTitle').textContent = card.emoji + ' ' + card.category;
+  document.getElementById('modalKnowledgeTitle').textContent = 'Edit Knowledge Card';
+  document.getElementById('knowledgeTitle').value = card.category || '';
   document.getElementById('knowledgeContent').value = card.content || '';
   openModal('modalKnowledge');
-  setTimeout(() => document.getElementById('knowledgeContent').focus(), 100);
+  setTimeout(() => document.getElementById('knowledgeTitle').focus(), 100);
 }
 
 function saveKnowledgeCard() {
   const id = document.getElementById('knowledgeId').value;
+  const title = document.getElementById('knowledgeTitle').value.trim();
   const content = document.getElementById('knowledgeContent').value;
   const cards = DB.getKnowledge();
   const card = cards.find(c => c.id === id);
   if (!card) return;
+  if (title) card.category = title;
   card.content = content;
   card.updatedAt = new Date().toISOString();
   DB.updateKnowledgeCard(card);
@@ -1356,15 +1404,24 @@ function updateSyncDesc() {
   const syncNowRow = document.getElementById('syncNowRow');
   const headerSyncBtn = document.getElementById('headerSyncBtn');
   if (!desc) return;
+  const restoreRow = document.getElementById('restoreBackupRow');
   if (s.gardenId) {
     const last = s.lastSync ? `Last sync: ${new Date(s.lastSync).toLocaleTimeString()}` : 'Not synced yet';
     desc.textContent = `ID: ${s.gardenId.slice(0,8)}… · ${last}`;
     if (syncNowRow) syncNowRow.style.display = '';
+    if (restoreRow) restoreRow.style.display = '';
     if (headerSyncBtn) headerSyncBtn.style.display = '';
   } else {
     desc.textContent = 'Share your garden across devices';
     if (syncNowRow) syncNowRow.style.display = 'none';
+    if (restoreRow) restoreRow.style.display = 'none';
     if (headerSyncBtn) headerSyncBtn.style.display = 'none';
+  }
+}
+
+function confirmRestoreBackup() {
+  if (confirm('Restore the previous cloud backup?\n\nThis will replace your current local data with the last snapshot saved before your most recent upload. Your photos in the cloud are unaffected.')) {
+    Sync.restoreBackup();
   }
 }
 
@@ -1377,9 +1434,11 @@ async function runSync(btnId, descId, btnLabel) {
   if (desc) desc.textContent = 'Checking…';
   try {
     const result = await Sync.smartSync();
-    if (result === 'pulled') { renderDashboard(); renderKnowledge(); showToast('Updated from cloud ✓'); if (desc) desc.textContent = 'Updated from cloud ✓'; }
-    else if (result === 'pushed') { showToast('Uploaded to cloud ✓'); if (desc) desc.textContent = 'Uploaded to cloud ✓'; }
-    else if (result === 'error') { showToast('Sync failed'); if (desc) desc.textContent = 'Sync failed — check connection'; }
+    if (result === 'pulled')     { renderDashboard(); renderKnowledge(); showToast('Updated from cloud ✓'); if (desc) desc.textContent = 'Updated from cloud ✓'; }
+    else if (result === 'pushed')    { showToast('Uploaded to cloud ✓'); if (desc) desc.textContent = 'Uploaded to cloud ✓'; }
+    else if (result === 'identical') { showToast('Already in sync ✓');   if (desc) desc.textContent = 'Already in sync ✓'; }
+    else if (result === 'cancelled') { if (desc) desc.textContent = 'Sync cancelled'; }
+    else if (result === 'error')     { showToast('Sync failed'); if (desc) desc.textContent = 'Sync failed — check connection'; }
   } finally {
     if (btn) { btn.disabled = false; if (btnLabel) btn.textContent = btnLabel; }
     if (icon) icon.style.animation = '';
@@ -1425,6 +1484,50 @@ document.addEventListener('keydown', e => {
 // TOAST
 // ============================================================
 let toastTimer = null;
+function showSyncConflictDialog(local, remote) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px';
+
+    overlay.innerHTML = `
+      <div style="background:var(--card);border-radius:var(--r);padding:24px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">⚠️ Sync Conflict</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.5">
+          Both sides have changed. Which version should win?
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+          <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">This device</div>
+            <div style="font-size:22px;font-weight:700">${local.plants}</div>
+            <div style="font-size:11px;color:var(--text3)">plants</div>
+            <div style="font-size:16px;font-weight:600;margin-top:4px">${local.logs}</div>
+            <div style="font-size:11px;color:var(--text3)">log entries</div>
+          </div>
+          <div style="background:var(--bg);border-radius:var(--rs);padding:12px;text-align:center">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Cloud</div>
+            <div style="font-size:22px;font-weight:700">${remote.plants}</div>
+            <div style="font-size:11px;color:var(--text3)">plants</div>
+            <div style="font-size:16px;font-weight:600;margin-top:4px">${remote.logs}</div>
+            <div style="font-size:11px;color:var(--text3)">log entries</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button id="scPull" class="btn btn-primary" style="width:100%">⬇️ Use Cloud version</button>
+          <button id="scPush" class="btn btn-secondary" style="width:100%">⬆️ Use This Device</button>
+          <button id="scCancel" class="btn btn-secondary btn-sm" style="width:100%;color:var(--text3)">Cancel</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const cleanup = (val) => { document.body.removeChild(overlay); resolve(val); };
+    overlay.querySelector('#scPull').onclick   = () => cleanup('pull');
+    overlay.querySelector('#scPush').onclick   = () => cleanup('push');
+    overlay.querySelector('#scCancel').onclick = () => cleanup(null);
+    overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(null); });
+  });
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;

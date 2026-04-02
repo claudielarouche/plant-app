@@ -121,6 +121,11 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'GET') {
     try {
+      // ?op=backup — return the saved backup snapshot
+      if (qs.op === 'backup') {
+        const backup = await store.get(`${gardenId}-backup`, { type: 'json' });
+        return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(backup || null) };
+      }
       const data = await store.get(gardenId, { type: 'json' });
       return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(data || { plants: [], logs: [], settings: {} }) };
     } catch (err) {
@@ -142,6 +147,14 @@ exports.handler = async (event) => {
       if (!Array.isArray(data.plants) || !Array.isArray(data.logs)) {
         return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'Invalid data format' }) };
       }
+
+      // Save current server state as backup before overwriting
+      try {
+        const existing = await store.get(gardenId, { type: 'json' });
+        if (existing && existing.plants?.length) {
+          await store.setJSON(`${gardenId}-backup`, { ...existing, backedUpAt: new Date().toISOString() });
+        }
+      } catch (_) { /* backup failure is non-fatal */ }
 
       const sanitized = { ...data, syncedAt: new Date().toISOString() };
       await store.setJSON(gardenId, sanitized);
