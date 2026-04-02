@@ -124,16 +124,22 @@ const Sync = {
     try {
       const remote = await this.fetchRemote();
 
-      // No server data yet — safe to push
-      if (!remote || (!remote.plants?.length && !remote.logs?.length)) {
+      const localPlants = DB.getPlants().length;
+      const localLogs   = DB.getLogs().length;
+      const remPlants   = remote?.plants?.length || 0;
+      const remLogs     = remote?.logs?.length   || 0;
+
+      // Cloud is empty — only push if local actually has data
+      if (!remPlants && !remLogs) {
+        if (!localPlants && !localLogs) {
+          setSyncDot('ok');
+          const s = DB.getSettings(); s.lastSync = new Date().toISOString(); DB.saveSettings(s);
+          updateSyncDesc();
+          return 'identical';
+        }
         await this.push();
         return 'pushed';
       }
-
-      const localPlants = DB.getPlants().length;
-      const localLogs   = DB.getLogs().length;
-      const remPlants   = remote.plants?.length || 0;
-      const remLogs     = remote.logs?.length   || 0;
 
       // Identical — nothing to do
       if (localPlants === remPlants && localLogs === remLogs) {
@@ -1814,7 +1820,9 @@ async function init() {
     migratePhotosToCloud();
   }
 
-  if (!DB.getPlants().length) {
+  // Only seed demo data for brand-new users with no Garden ID.
+  // If a Garden ID is set, they're a returning user — sync handles their data.
+  if (!DB.getPlants().length && !DB.getSettings().gardenId) {
     const demoPlants = [
       { id: uuid(), name: 'Tomato — Kitchen window', type: 'Fruit', startDate: '2025-03-01', location: 'Kitchen, south-facing', emoji: '🍅', notes: 'Indeterminate variety, needs staking', active: true, photos: [], createdAt: new Date().toISOString() },
       { id: uuid(), name: 'Basil', type: 'Herb', startDate: '2025-02-15', location: 'Bedroom windowsill', emoji: '🌿', notes: 'Pinch flowers to keep bushy', active: true, photos: [], createdAt: new Date().toISOString() },
